@@ -266,9 +266,8 @@ export const ReservationService = {
     if (!available) throw new Error(`Conflito de datas.`);
     
     const dbData = mapReservationToDB(reservation);
-    const { data, error } = await supabase.from('reservations').insert(dbData).select().single();
+    const { error } = await supabase.from('reservations').insert(dbData);
     if (error) throw new Error("Erro ao salvar reserva: " + error.message);
-    return mapReservationFromDB(data);
   },
 
   update: async (updatedReservation: Reservation) => {
