@@ -66,6 +66,7 @@ const ALLOWED_PHONES = (process.env.ALLOWED_PHONES || '').split(',').filter(Bool
 
 export async function handleWebhook(req: Request, res: Response) {
   res.sendStatus(200);
+  console.log('[webhook] payload:', JSON.stringify(req.body, null, 2));
 
   const parsed = parseEvolutionPayload(req.body);
   if (!parsed) return;
