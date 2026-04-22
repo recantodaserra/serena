@@ -62,12 +62,20 @@ function parseEvolutionPayload(body: any): ParsedMessage | null {
   }
 }
 
+const ALLOWED_PHONES = (process.env.ALLOWED_PHONES || '').split(',').filter(Boolean);
+
 export async function handleWebhook(req: Request, res: Response) {
   res.sendStatus(200);
 
   const parsed = parseEvolutionPayload(req.body);
   if (!parsed) return;
   if (parsed.fromMe) return;
+
+  // Filtro de teste: se ALLOWED_PHONES estiver definido, só processa esses números
+  if (ALLOWED_PHONES.length > 0 && !ALLOWED_PHONES.includes(parsed.phone)) {
+    console.log(`[webhook] Número ${parsed.phone} bloqueado pelo filtro de teste`);
+    return;
+  }
 
   const { phone, type, mediaUrl, mediaBase64 } = parsed;
   let { content } = parsed;
