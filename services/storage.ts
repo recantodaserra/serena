@@ -1,7 +1,7 @@
 
 import { supabase } from '../supabaseClient';
 import { Chalet, GalleryItem } from '../types';
-import { CHALETS as DEFAULT_CHALETS, SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants';
+import { CHALETS as DEFAULT_CHALETS } from '../constants';
 
 // --- DEFINIÇÃO DE TIPOS ---
 export interface Reservation {
@@ -266,13 +266,14 @@ export const ReservationService = {
     if (!available) throw new Error(`Conflito de datas.`);
     
     const dbData = mapReservationToDB(reservation);
-    // Usa fetch direto para contornar bug do supabase-js v2.39.3 com header Prefer no INSERT
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/reservations`, {
+    // Usa fetch direto para contornar bug do supabase-js v2.39.3 com header Prefer no INSERT.
+    // Reutiliza URL e headers já validados pelo client (que funciona para leituras).
+    const restClient = (supabase as any).rest;
+    const response = await fetch(`${restClient.url}/reservations`, {
       method: 'POST',
       headers: {
+        ...restClient.headers,
         'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         'Prefer': 'return=minimal'
       },
       body: JSON.stringify(dbData)
