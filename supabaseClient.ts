@@ -1,10 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './constants';
 
-// Cria uma instância única do cliente para ser usada em toda a aplicação
-// Verifica se as chaves existem para evitar erros em tempo de execução
-const isSupabaseConfigured = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
+// Valida que as chaves estão presentes e que a URL tem formato mínimo válido.
+// Se um painel (Vercel/Railway) entregou a chave com \n, espaço ou char de
+// controle, constants.cleanEnv já removeu — aqui garantimos que o que sobrou
+// é utilizável antes de criar o client.
+const isValidHttpUrl = (u: string) => /^https?:\/\/[^\s]+$/.test(u);
+const isSupabaseConfigured =
+  !!SUPABASE_URL && !!SUPABASE_ANON_KEY && isValidHttpUrl(SUPABASE_URL);
 
-export const supabase = isSupabaseConfigured 
+if (!isSupabaseConfigured && typeof window !== 'undefined') {
+  console.error(
+    '[supabaseClient] VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY ausentes/inválidos. ' +
+      'URL recebida:', SUPABASE_URL ? `"${SUPABASE_URL}"` : '(vazia)',
+    '| ANON_KEY length:', SUPABASE_ANON_KEY.length,
+  );
+}
+
+export const supabase = isSupabaseConfigured
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
