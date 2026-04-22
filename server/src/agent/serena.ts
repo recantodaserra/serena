@@ -41,23 +41,21 @@ export async function runSerena(
   let finalText = '';
 
   const config = await getAgentConfig();
+  const systemPrompt = buildSystemPrompt(config);
+  const tools = TOOL_DEFINITIONS.map(t => ({
+    type: 'function' as const,
+    function: { name: t.name, description: t.description, parameters: t.input_schema }
+  }));
 
   // Agentic loop
   for (let step = 0; step < 8; step++) {
     const response = await openai.chat.completions.create({
       model: 'gpt-4.1',
       max_tokens: 1500,
-      tools: TOOL_DEFINITIONS.map(t => ({
-        type: 'function' as const,
-        function: {
-          name: t.name,
-          description: t.description,
-          parameters: t.input_schema
-        }
-      })),
+      tools,
       tool_choice: 'auto',
       messages: [
-        { role: 'system', content: buildSystemPrompt(config) },
+        { role: 'system', content: systemPrompt },
         ...messages
       ]
     });

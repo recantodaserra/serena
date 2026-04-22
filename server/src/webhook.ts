@@ -3,6 +3,7 @@ import { ConversationService, MessageService } from './services/supabase.js';
 import { WhatsApp } from './services/whatsapp.js';
 import { transcribeAudio, describeImage } from './services/media.js';
 import { runSerena } from './agent/serena.js';
+import { bufferMessage, BufferedMessage } from './services/messageBuffer.js';
 
 interface ParsedMessage {
   phone: string;
@@ -66,25 +67,22 @@ const ALLOWED_PHONES = (process.env.ALLOWED_PHONES || '').split(',').filter(Bool
 
 export async function handleWebhook(req: Request, res: Response) {
   res.sendStatus(200);
-  console.log('[webhook] payload:', JSON.stringify(req.body, null, 2));
 
   const parsed = parseEvolutionPayload(req.body);
-  if (!parsed) return;
-  if (parsed.fromMe) return;
+  if (!parsed || parsed.fromMe) return;
 
-  // Filtro de teste: se ALLOWED_PHONES estiver definido, só processa esses números
   if (ALLOWED_PHONES.length > 0 && !ALLOWED_PHONES.includes(parsed.phone)) {
-    console.log(`[webhook] Número ${parsed.phone} bloqueado pelo filtro de teste`);
+    console.log(`[webhook] Número ${parsed.phone} bloqueado pelo filtro`);
     return;
   }
 
-  const { phone, type, mediaUrl, mediaBase64 } = parsed;
-  let { content } = parsed;
+  const { phone, type, mediaUrl, mediaBase64, content } = parsed;
 
   try {
     const conv = await ConversationService.upsert(phone);
     await ConversationService.updateLastMessage(phone, content);
 
+    // Salva a mensagem no banco imediatamente (aparece no CRM em tempo real)
     await MessageService.save({
       conversation_id: conv.id,
       direction: 'in',
@@ -95,58 +93,122 @@ export async function handleWebhook(req: Request, res: Response) {
       timestamp: new Date().toISOString()
     });
 
+    // Conversa em atendimento humano: só incrementa não lidas, não processa com IA
     if (conv.status === 'transferred') {
       await ConversationService.incrementUnread(phone);
       return;
     }
 
-    // Processa mídia antes de enviar para a Serena
-    let imageBase64ForSerena: string | undefined;
+    // Enfileira no buffer — aguarda silêncio de 4s antes de chamar a Serena
+    bufferMessage(
+      phone,
+      conv.id,
+      { content, type, mediaBase64, mediaUrl },
+      processBufferedMessages
+    );
 
-    if (type === 'audio' && mediaBase64) {
+  } catch (err: any) {
+    console.error(`[webhook] Erro ao receber mensagem de ${phone}:`, err.message);
+  }
+}
+
+// Chamado pelo buffer após o silêncio de 4s.
+// Pode receber N mensagens acumuladas (texto, áudio, imagem, etc.).
+async function processBufferedMessages(
+  conversationId: string,
+  phone: string,
+  messages: BufferedMessage[]
+): Promise<void> {
+  const contentParts: string[] = [];
+  let imageBase64ForSerena: string | undefined;
+
+  // Processa cada mensagem do buffer (transcrição de áudio, análise de imagem, etc.)
+  for (const msg of messages) {
+    let content = msg.content;
+
+    if (msg.type === 'audio' && msg.mediaBase64) {
       try {
-        const transcript = await transcribeAudio(mediaBase64);
+        const transcript = await transcribeAudio(msg.mediaBase64);
         content = `[Transcrição de áudio]: ${transcript}`;
       } catch (err: any) {
         console.error('[webhook] Erro ao transcrever áudio:', err.message);
         content = '[Cliente enviou um áudio, mas não foi possível transcrever]';
       }
-    } else if ((type === 'image' || type === 'document') && mediaBase64) {
-      imageBase64ForSerena = mediaBase64;
-      if (type === 'document') {
-        try {
-          const description = await describeImage(mediaBase64, content);
-          content = `[Documento enviado]: ${description}`;
-          imageBase64ForSerena = undefined;
-        } catch (err: any) {
-          console.error('[webhook] Erro ao analisar documento:', err.message);
-          content = '[Cliente enviou um documento]';
-        }
+    } else if (msg.type === 'image' && msg.mediaBase64) {
+      // Imagem é passada diretamente para a Serena ver
+      imageBase64ForSerena = msg.mediaBase64;
+    } else if (msg.type === 'document' && msg.mediaBase64) {
+      try {
+        const description = await describeImage(msg.mediaBase64, msg.content);
+        content = `[Documento enviado]: ${description}`;
+      } catch (err: any) {
+        console.error('[webhook] Erro ao analisar documento:', err.message);
+        content = '[Cliente enviou um documento]';
       }
     }
 
-    const result = await runSerena(conv.id, phone, content, imageBase64ForSerena);
-
-    await MessageService.save({
-      conversation_id: conv.id,
-      direction: 'out',
-      content: result.text,
-      type: 'text',
-      sender_type: 'agent',
-      timestamp: new Date().toISOString()
-    });
-
-    await ConversationService.updateLastMessage(phone, result.text);
-
-    if (result.transfer) {
-      await ConversationService.markTransferred(phone, result.transfer.reason);
-      const teamMsg = `⚡ *Transferência de Atendimento*\n\nCliente: ${phone}\nMotivo: ${result.transfer.reason}\n\nÚltima mensagem: "${parsed.content}"`;
-      await WhatsApp.notifyTeam(teamMsg);
-    }
-
-    await WhatsApp.sendText(phone, result.text);
-
-  } catch (err: any) {
-    console.error(`[webhook] Erro ao processar mensagem de ${phone}:`, err.message);
+    if (content) contentParts.push(content);
   }
+
+  // Combina todas as mensagens do buffer em uma única entrada para a IA
+  const combinedContent = contentParts.join('\n');
+
+  const result = await runSerena(conversationId, phone, combinedContent, imageBase64ForSerena);
+
+  // Salva resposta da Serena no banco
+  await MessageService.save({
+    conversation_id: conversationId,
+    direction: 'out',
+    content: result.text,
+    type: 'text',
+    sender_type: 'agent',
+    timestamp: new Date().toISOString()
+  });
+
+  await ConversationService.updateLastMessage(phone, result.text);
+
+  // Transferência para humano: notifica equipe ANTES de enviar mensagem ao cliente
+  if (result.transfer) {
+    await ConversationService.markTransferred(phone, result.transfer.reason);
+    await notifyTransfer(phone, result.transfer.reason, messages);
+  }
+
+  // Envia resposta em blocos com typing indicator
+  await WhatsApp.sendBlocks(phone, result.text);
+}
+
+const TRANSFER_REASON_LABELS: Record<string, string> = {
+  hospede_chegou:  '🏠 Hóspede já chegou / check-in',
+  decoracao:       '🌸 Decoração / ornamentação',
+  pagamento_cartao:'💳 Pagamento por cartão',
+  falha_reserva:   '⚠️ Falha ao criar reserva',
+  sem_resposta:    '❓ Dúvida sem resposta'
+};
+
+async function notifyTransfer(
+  phone: string,
+  reason: string,
+  messages: BufferedMessage[]
+): Promise<void> {
+  const label = TRANSFER_REASON_LABELS[reason] || reason;
+
+  // Pega o conteúdo original das últimas 3 mensagens para contexto
+  const recentTexts = messages
+    .slice(-3)
+    .map(m => `  • ${m.content.slice(0, 120)}`)
+    .join('\n');
+
+  const teamMsg = [
+    `⚡ *TRANSFERÊNCIA DE ATENDIMENTO*`,
+    ``,
+    `👤 *Cliente:* +${phone}`,
+    `📋 *Motivo:* ${label}`,
+    ``,
+    `💬 *Últimas mensagens:*`,
+    recentTexts,
+    ``,
+    `📲 Abrir conversa: https://wa.me/${phone}`
+  ].join('\n');
+
+  await WhatsApp.notifyTeam(teamMsg);
 }

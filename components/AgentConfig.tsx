@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Save, Plus, Trash2, Bot, FileText, CreditCard, Settings2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import {
+  Save, Plus, Trash2, Bot, FileText, CreditCard, Settings2,
+  CheckCircle2, AlertCircle, RefreshCw, ListChecks, Home
+} from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -16,34 +19,47 @@ interface AgentConfig {
   pix_chave: string;
   photo_url: string;
   location_url: string;
+  atendimento_rules: string;
+  chalets_info: string;
 }
 
 const TONE_OPTIONS = [
-  { value: 'amigavel', label: 'Amigável', desc: 'Calorosa, usa emojis, comunicação leve' },
-  { value: 'formal', label: 'Formal', desc: 'Profissional, sem gírias, menos emojis' },
-  { value: 'casual', label: 'Casual', desc: 'Descontraído, como um amigo ajudando' },
+  { value: 'amigavel', label: 'Amigável',  desc: 'Calorosa, usa emojis, comunicação leve' },
+  { value: 'formal',   label: 'Formal',    desc: 'Profissional, sem gírias, menos emojis' },
+  { value: 'casual',   label: 'Casual',    desc: 'Descontraído, como um amigo ajudando' },
 ];
 
-type Tab = 'identidade' | 'faq' | 'pix' | 'avancado';
+type Tab = 'identidade' | 'atendimento' | 'chales' | 'faq' | 'pix' | 'avancado';
 
 const TabBtn: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> =
   ({ active, onClick, icon, label }) => (
     <button
       onClick={onClick}
       className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-        active ? 'bg-purple-600 text-white shadow' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+        active
+          ? 'bg-purple-600 text-white shadow'
+          : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
       }`}
     >
       {icon} {label}
     </button>
   );
 
+const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode }> =
+  ({ label, hint, children }) => (
+    <div>
+      <label className="block text-sm font-bold text-gray-700 mb-1">{label}</label>
+      {hint && <p className="text-xs text-gray-400 mb-2">{hint}</p>}
+      {children}
+    </div>
+  );
+
 const AgentConfigManager: React.FC = () => {
-  const [config, setConfig] = useState<AgentConfig | null>(null);
+  const [config, setConfig]     = useState<AgentConfig | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('identidade');
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
+  const [saving, setSaving]     = useState(false);
+  const [loading, setLoading]   = useState(true);
+  const [toast, setToast]       = useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
 
   const showToast = (type: 'ok' | 'err', msg: string) => {
     setToast({ type, msg });
@@ -109,13 +125,16 @@ const AgentConfigManager: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
             <Bot className="text-purple-600" size={28} /> Serena — Agente IA
           </h2>
-          <p className="text-gray-500 text-sm mt-1">Configure o comportamento, personalidade e dados do agente de WhatsApp</p>
+          <p className="text-gray-500 text-sm mt-1">
+            Configure o comportamento, regras de atendimento, chalés e dados do agente
+          </p>
         </div>
         <button
           onClick={save}
@@ -129,7 +148,11 @@ const AgentConfigManager: React.FC = () => {
 
       {/* Toast */}
       {toast && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium ${toast.type === 'ok' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium ${
+          toast.type === 'ok'
+            ? 'bg-green-50 text-green-700 border border-green-200'
+            : 'bg-red-50 text-red-700 border border-red-200'
+        }`}>
           {toast.type === 'ok' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           {toast.msg}
         </div>
@@ -137,44 +160,48 @@ const AgentConfigManager: React.FC = () => {
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-2">
-        <TabBtn active={activeTab === 'identidade'} onClick={() => setActiveTab('identidade')} icon={<Bot size={15} />} label="Identidade" />
-        <TabBtn active={activeTab === 'faq'} onClick={() => setActiveTab('faq')} icon={<FileText size={15} />} label="FAQ" />
-        <TabBtn active={activeTab === 'pix'} onClick={() => setActiveTab('pix')} icon={<CreditCard size={15} />} label="Dados PIX" />
-        <TabBtn active={activeTab === 'avancado'} onClick={() => setActiveTab('avancado')} icon={<Settings2 size={15} />} label="Avançado" />
+        <TabBtn active={activeTab === 'identidade'}  onClick={() => setActiveTab('identidade')}  icon={<Bot size={15} />}        label="Identidade" />
+        <TabBtn active={activeTab === 'atendimento'} onClick={() => setActiveTab('atendimento')} icon={<ListChecks size={15} />}  label="Atendimento" />
+        <TabBtn active={activeTab === 'chales'}      onClick={() => setActiveTab('chales')}      icon={<Home size={15} />}        label="Chalés" />
+        <TabBtn active={activeTab === 'faq'}         onClick={() => setActiveTab('faq')}         icon={<FileText size={15} />}    label="FAQ" />
+        <TabBtn active={activeTab === 'pix'}         onClick={() => setActiveTab('pix')}         icon={<CreditCard size={15} />}  label="Dados PIX" />
+        <TabBtn active={activeTab === 'avancado'}    onClick={() => setActiveTab('avancado')}    icon={<Settings2 size={15} />}   label="Avançado" />
       </div>
 
-      {/* Tab: Identidade */}
+      {/* ── Tab: Identidade ── */}
       {activeTab === 'identidade' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-6">
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">Descrição da Serena</label>
-            <p className="text-xs text-gray-400 mb-2">Define quem é a Serena e como ela se apresenta</p>
+          <Field label="Descrição da Serena" hint="Define quem é a Serena e como ela se apresenta ao cliente">
             <textarea
               rows={5}
               value={config.identity}
               onChange={e => set('identity', e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none"
             />
-          </div>
+          </Field>
 
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">Tom de Voz</label>
+          <Field label="Tom de Voz">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {TONE_OPTIONS.map(opt => (
                 <button
                   key={opt.value}
                   onClick={() => set('tone', opt.value)}
-                  className={`text-left p-4 rounded-xl border-2 transition-all ${config.tone === opt.value ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'}`}
+                  className={`text-left p-4 rounded-xl border-2 transition-all ${
+                    config.tone === opt.value
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
                 >
-                  <p className={`font-bold text-sm ${config.tone === opt.value ? 'text-purple-700' : 'text-gray-700'}`}>{opt.label}</p>
+                  <p className={`font-bold text-sm ${config.tone === opt.value ? 'text-purple-700' : 'text-gray-700'}`}>
+                    {opt.label}
+                  </p>
                   <p className="text-xs text-gray-500 mt-1">{opt.desc}</p>
                 </button>
               ))}
             </div>
-          </div>
+          </Field>
 
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">Links</label>
+          <Field label="Links">
             <div className="grid grid-cols-1 gap-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Link das fotos</label>
@@ -195,17 +222,69 @@ const AgentConfigManager: React.FC = () => {
                 />
               </div>
             </div>
-          </div>
+          </Field>
         </div>
       )}
 
-      {/* Tab: FAQ */}
+      {/* ── Tab: Atendimento ── */}
+      {activeTab === 'atendimento' && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
+          <div>
+            <h3 className="font-bold text-gray-800">Fluxo de Atendimento e Regras</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Define as etapas do processo de reserva, prioridades especiais e regras de transferência.
+              Edite à vontade — a Serena segue exatamente o que está escrito aqui.
+            </p>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700">
+            <strong>Dica de formatação:</strong> Use linhas em branco para separar seções. Emojis e CAIXA ALTA funcionam como destaque para a IA.
+          </div>
+
+          <textarea
+            rows={28}
+            value={config.atendimento_rules}
+            onChange={e => set('atendimento_rules', e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-y font-mono leading-relaxed"
+            spellCheck={false}
+          />
+        </div>
+      )}
+
+      {/* ── Tab: Chalés ── */}
+      {activeTab === 'chales' && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
+          <div>
+            <h3 className="font-bold text-gray-800">Informações dos Chalés</h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Descrição dos chalés que a Serena usa para apresentar ao cliente. Inclua nome, capacidade,
+              comodidades, check-in/check-out e regras gerais de hospedagem.
+            </p>
+          </div>
+
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-700">
+            <strong>Formatação WhatsApp:</strong> Use <code>*texto*</code> para negrito (um asterisco). Exemplo: <code>*Chalé da Floresta*</code>
+          </div>
+
+          <textarea
+            rows={18}
+            value={config.chalets_info}
+            onChange={e => set('chalets_info', e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-y font-mono leading-relaxed"
+            spellCheck={false}
+          />
+        </div>
+      )}
+
+      {/* ── Tab: FAQ ── */}
       {activeTab === 'faq' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-bold text-gray-800">Perguntas Frequentes</h3>
-              <p className="text-xs text-gray-400 mt-0.5">A Serena usará essas respostas quando o cliente perguntar</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                A Serena usará essas respostas quando o cliente perguntar algo específico
+              </p>
             </div>
             <button
               onClick={addFaq}
@@ -226,7 +305,9 @@ const AgentConfigManager: React.FC = () => {
           {config.faq.map((item, i) => (
             <div key={i} className="border border-gray-200 rounded-xl p-4 space-y-3">
               <div className="flex items-start gap-3">
-                <span className="bg-purple-100 text-purple-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
+                <span className="bg-purple-100 text-purple-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                  {i + 1}
+                </span>
                 <div className="flex-1 space-y-2">
                   <input
                     type="text"
@@ -252,19 +333,22 @@ const AgentConfigManager: React.FC = () => {
         </div>
       )}
 
-      {/* Tab: PIX */}
+      {/* ── Tab: PIX ── */}
       {activeTab === 'pix' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
           <div>
             <h3 className="font-bold text-gray-800">Dados para Pagamento PIX</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Esses dados são enviados automaticamente quando o cliente confirma a reserva</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Enviados automaticamente quando o cliente confirma a reserva
+            </p>
           </div>
+
           <div className="grid grid-cols-1 gap-4">
             {[
-              { key: 'pix_razao_social' as const, label: 'Razão Social', placeholder: 'Ex: RECANTO DA SERRA ECO PARK LTDA' },
-              { key: 'pix_cnpj' as const, label: 'CNPJ', placeholder: 'Ex: 61.187.265/0001-35' },
-              { key: 'pix_banco' as const, label: 'Banco', placeholder: 'Ex: 323 - Mercado Pago' },
-              { key: 'pix_chave' as const, label: 'Chave PIX', placeholder: 'CNPJ, CPF, telefone ou e-mail' },
+              { key: 'pix_razao_social' as const, label: 'Razão Social',  placeholder: 'Ex: RECANTO DA SERRA ECO PARK LTDA' },
+              { key: 'pix_cnpj'         as const, label: 'CNPJ',          placeholder: 'Ex: 61.187.265/0001-35' },
+              { key: 'pix_banco'        as const, label: 'Banco',         placeholder: 'Ex: 323 - Mercado Pago' },
+              { key: 'pix_chave'        as const, label: 'Chave PIX',     placeholder: 'CNPJ, CPF, telefone ou e-mail' },
             ].map(field => (
               <div key={field.key}>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">{field.label}</label>
@@ -280,7 +364,9 @@ const AgentConfigManager: React.FC = () => {
           </div>
 
           <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 mt-2">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Preview — Como será enviado ao cliente:</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+              Preview — Como será enviado ao cliente:
+            </p>
             <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
 {`💳 DADOS PARA PAGAMENTO VIA PIX
 
@@ -293,39 +379,36 @@ const AgentConfigManager: React.FC = () => {
         </div>
       )}
 
-      {/* Tab: Avançado */}
+      {/* ── Tab: Avançado ── */}
       {activeTab === 'avancado' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-6">
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">Instruções Adicionais</label>
-            <p className="text-xs text-gray-400 mb-2">
-              Regras extras, restrições ou comportamentos específicos que a Serena deve seguir.
-              Adicionadas ao final do prompt, com prioridade sobre o comportamento padrão.
-            </p>
+          <Field
+            label="Instruções Adicionais"
+            hint="Regras extras ou restrições específicas. Adicionadas ao final do prompt com prioridade sobre o comportamento padrão."
+          >
             <textarea
               rows={8}
-              placeholder={`Ex:\n- Não mencione concorrentes\n- Se o cliente perguntar sobre pets, diga que não são permitidos\n- Horário de silêncio após 22h`}
+              placeholder={`Ex:\n- Não mencione concorrentes\n- Pets não são permitidos\n- Silêncio após 22h`}
               value={config.custom_instructions}
               onChange={e => set('custom_instructions', e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none font-mono"
             />
-          </div>
+          </Field>
 
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-            <p className="text-xs font-bold text-yellow-800 mb-1">Quando transferir para humano</p>
-            <p className="text-xs text-yellow-700">
-              A Serena transfere automaticamente nos seguintes casos:
-            </p>
-            <ul className="text-xs text-yellow-700 mt-2 space-y-1 list-disc list-inside">
-              <li><strong>hospede_chegou</strong> — cliente já está no local ou tem dúvida sobre o chalé</li>
-              <li><strong>decoracao</strong> — assuntos de decoração, surpresa, ornamentação</li>
-              <li><strong>pagamento_cartao</strong> — cliente quer pagar no cartão</li>
-              <li><strong>falha_reserva</strong> — erro técnico ao criar reserva</li>
-              <li><strong>sem_resposta</strong> — cliente não responde há muito tempo</li>
-            </ul>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <p className="text-xs font-bold text-blue-800 mb-2">Hierarquia das configurações</p>
+            <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+              <li><strong>Identidade</strong> — quem é a Serena e tom de voz</li>
+              <li><strong>Atendimento</strong> — fluxo das etapas e regras de prioridade</li>
+              <li><strong>Chalés</strong> — informações das acomodações</li>
+              <li><strong>FAQ</strong> — respostas para perguntas frequentes</li>
+              <li><strong>Instruções Adicionais</strong> — regras extras (esta aba)</li>
+            </ol>
+            <p className="text-xs text-blue-600 mt-2">As instruções adicionais têm prioridade máxima e sobrepõem qualquer configuração acima.</p>
           </div>
         </div>
       )}
+
     </div>
   );
 };

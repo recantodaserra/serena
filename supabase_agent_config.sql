@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS agent_config (
   pix_chave TEXT NOT NULL DEFAULT '61187265000135',
   photo_url TEXT NOT NULL DEFAULT 'https://recantodaserrafotos.lovable.app/',
   location_url TEXT NOT NULL DEFAULT 'https://maps.app.goo.gl/aDfdSCxEeCnsPQ5a8',
+  atendimento_rules TEXT NOT NULL DEFAULT '',
+  chalets_info TEXT NOT NULL DEFAULT '',
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -20,3 +22,9 @@ INSERT INTO agent_config (id) VALUES ('main') ON CONFLICT (id) DO NOTHING;
 -- RLS
 ALTER TABLE agent_config ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "open_agent_config" ON agent_config FOR ALL USING (true) WITH CHECK (true);
+
+-- =============================================
+-- MIGRAÇÃO: rode isso se a tabela já existir
+-- =============================================
+ALTER TABLE agent_config ADD COLUMN IF NOT EXISTS atendimento_rules TEXT NOT NULL DEFAULT '';
+ALTER TABLE agent_config ADD COLUMN IF NOT EXISTS chalets_info TEXT NOT NULL DEFAULT '';

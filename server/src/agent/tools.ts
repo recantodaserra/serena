@@ -16,13 +16,13 @@ function chaletNameToId(name: string, chalets: { id: string; name: string }[]): 
 
 function dayOfWeek(dateStr: string): number {
   const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d).getDay();
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
 function addDays(dateStr: string, n: number): string {
+  // Use UTC explicitly to avoid off-by-one issues across server timezones
   const [y, m, d] = dateStr.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  date.setDate(date.getDate() + n);
+  const date = new Date(Date.UTC(y, m - 1, d + n));
   return date.toISOString().split('T')[0];
 }
 
@@ -56,9 +56,11 @@ export async function executeTool(tool: ToolInput, phone: string): Promise<ToolR
       case 'transferir_para_humano':
         return { type: 'transfer', reason: String(tool.input.motivo || 'Solicitação do cliente'), text: String(tool.input.mensagem || 'Vou chamar um atendente para você. Um momento!') };
       default:
+        console.error(`[tools] Ferramenta desconhecida chamada: ${tool.name}`);
         return { type: 'text', text: `Ferramenta desconhecida: ${tool.name}` };
     }
   } catch (err: any) {
+    console.error(`[tools] Erro em ${tool.name}:`, err.message);
     return { type: 'text', text: `Erro ao executar ${tool.name}: ${err.message}` };
   }
 }

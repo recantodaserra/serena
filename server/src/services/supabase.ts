@@ -38,9 +38,18 @@ export interface MemoryEntry {
 
 export const ConversationService = {
   async upsert(phone: string, name?: string): Promise<Conversation> {
+    // First try to find existing conversation to avoid overwriting name
+    const { data: existing } = await supabase
+      .from('conversations')
+      .select()
+      .eq('phone', phone)
+      .single();
+
+    if (existing) return existing;
+
     const { data, error } = await supabase
       .from('conversations')
-      .upsert({ phone, name }, { onConflict: 'phone' })
+      .insert({ phone, name: name || null, status: 'active', unread_count: 0 })
       .select()
       .single();
     if (error) throw error;
@@ -172,6 +181,12 @@ export const ReservationDB = {
     totalValue: number;
     observations?: string;
   }) {
+    // Re-check availability inside the insert to prevent race-condition overbooking
+    const available = await ReservationDB.checkAvailability(params.chaletId, params.startDate, params.endDate);
+    if (!available) {
+      throw new Error('O chalé não está mais disponível para as datas selecionadas.');
+    }
+
     const { data, error } = await supabase
       .from('reservations')
       .insert({
