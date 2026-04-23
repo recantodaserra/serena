@@ -16,6 +16,59 @@ interface ParsedMessage {
   audioTranscript?: string;
   fromMe: boolean;
   messageId?: string;
+  // Mensagem Evolution completa — necessária para o endpoint
+  // /chat/getBase64FromMediaMessage quando a base64 não vem no webhook.
+  rawMessage?: any;
+}
+
+// Evolution v1/v2/cloud colocam o base64 em lugares diferentes dependendo da
+// config (WEBHOOK_BASE64, MESSAGE_BASE64_INSERT, plugin openai-bot, etc).
+// Procurar em TODOS os lugares conhecidos evita perder áudio por causa de um
+// campo com nome diferente. Retorna undefined se realmente não tiver.
+function extractBase64(body: any, data: any, msg: any, mediaObj: any): string | undefined {
+  const candidates = [
+    body?.base64,             // raiz do webhook
+    data?.base64,             // dentro de data
+    data?.message?.base64,    // dentro de data.message (v2 comum)
+    msg?.base64,              // alias de data.message.base64
+    mediaObj?.base64,         // dentro do audioMessage/imageMessage/documentMessage
+    mediaObj?.mediaData,      // algumas versões usam mediaData
+    data?.mediaBase64,        // variante
+    body?.mediaBase64
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.length > 100) return c;
+  }
+  return undefined;
+}
+
+// O plugin openai-bot da Evolution (e alguns custom) injetam a transcrição
+// direto no payload — se vier, economizamos a chamada ao Whisper.
+function extractSpeechToText(body: any, data: any, msg: any, mediaObj: any): string | undefined {
+  const candidates = [
+    body?.speechToText,
+    data?.speechToText,
+    data?.message?.speechToText,
+    msg?.speechToText,
+    mediaObj?.speechToText,
+    data?.message?.transcription,
+    mediaObj?.transcription
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim().length > 0) return c.trim();
+  }
+  return undefined;
+}
+
+// Algumas mensagens vêm embrulhadas em ephemeralMessage / viewOnceMessage /
+// messageContextInfo. Desembrulha recursivamente pra chegar no payload real.
+function unwrapMessage(msg: any): any {
+  if (!msg) return msg;
+  if (msg.ephemeralMessage?.message) return unwrapMessage(msg.ephemeralMessage.message);
+  if (msg.viewOnceMessage?.message) return unwrapMessage(msg.viewOnceMessage.message);
+  if (msg.viewOnceMessageV2?.message) return unwrapMessage(msg.viewOnceMessageV2.message);
+  if (msg.documentWithCaptionMessage?.message) return unwrapMessage(msg.documentWithCaptionMessage.message);
+  return msg;
 }
 
 function parseEvolutionPayload(body: any): ParsedMessage | null {
@@ -31,7 +84,8 @@ function parseEvolutionPayload(body: any): ParsedMessage | null {
     if (!phoneMatch) return null;
     const phone = phoneMatch[1];
 
-    const msg = data.message || {};
+    const rawMsg = data.message || {};
+    const msg = unwrapMessage(rawMsg);
     let content = '';
     let type = 'text';
     let mediaUrl: string | undefined;
@@ -46,32 +100,34 @@ function parseEvolutionPayload(body: any): ParsedMessage | null {
       type = 'image';
       content = msg.imageMessage.caption || '[Imagem]';
       mediaUrl = msg.imageMessage.url;
-      mediaBase64 = data.message?.base64 || msg.imageMessage?.base64;
+      mediaBase64 = extractBase64(body, data, msg, msg.imageMessage);
     } else if (msg.audioMessage) {
       type = 'audio';
       content = '[Áudio]';
-      mediaBase64 = data.message?.base64 || msg.audioMessage?.base64;
-      // Se a Evolution está configurada para transcrever áudios (OpenAI bot),
-      // a transcrição já chega no payload e pode ser usada direto sem Whisper.
-      audioTranscript =
-        data.message?.speechToText ||
-        msg.speechToText ||
-        msg.audioMessage?.speechToText ||
-        data.speechToText;
+      mediaBase64 = extractBase64(body, data, msg, msg.audioMessage);
+      audioTranscript = extractSpeechToText(body, data, msg, msg.audioMessage);
     } else if (msg.documentMessage) {
       type = 'document';
       content = msg.documentMessage.caption || '[Documento]';
       mediaUrl = msg.documentMessage.url;
-      mediaBase64 = data.message?.base64 || msg.documentMessage?.base64;
+      mediaBase64 = extractBase64(body, data, msg, msg.documentMessage);
     } else if (msg.videoMessage) {
       type = 'video';
       content = msg.videoMessage.caption || '[Vídeo]';
     } else {
+      // Log pra ajudar a descobrir qualquer tipo de mensagem exótico
+      // (pollMessage, reactionMessage, stickerMessage, etc.) que a gente
+      // não suporta. Sem crash.
+      console.log(`[webhook] mensagem ignorada, tipo desconhecido: ${Object.keys(msg).join(',')}`);
       return null;
     }
 
-    return { phone, content, type, mediaUrl, mediaBase64, audioTranscript, fromMe, messageId };
-  } catch {
+    return {
+      phone, content, type, mediaUrl, mediaBase64, audioTranscript, fromMe, messageId,
+      rawMessage: data
+    };
+  } catch (err: any) {
+    console.error('[webhook] parseEvolutionPayload falhou:', err?.message);
     return null;
   }
 }
@@ -162,7 +218,7 @@ export async function handleWebhook(req: Request, res: Response) {
           `[webhook] áudio msgId=${parsed.messageId} inlineBase64=${hasB64Inline}${hasB64Inline ? ` (${resolvedBase64!.length} chars)` : ''}`
         );
         if (!resolvedBase64 && parsed.messageId) {
-          resolvedBase64 = await WhatsApp.fetchMediaBase64(parsed.messageId);
+          resolvedBase64 = await WhatsApp.fetchMediaBase64(parsed.messageId, parsed.rawMessage);
           if (resolvedBase64) {
             console.log(
               `[webhook] base64 buscado via API para msgId=${parsed.messageId} (${resolvedBase64.length} chars)`
@@ -240,19 +296,24 @@ async function processBufferedMessages(
     let content = msg.content;
 
     if (msg.type === 'audio' && msg.audioTranscript) {
-      // Evolution já transcreveu — usa direto.
-      content = `[Transcrição de áudio]: ${msg.audioTranscript}`;
+      // Evolution já transcreveu — entrega como texto normal pra Serena.
+      content = msg.audioTranscript;
     } else if (msg.type === 'audio' && msg.mediaBase64) {
       try {
         const transcript = await transcribeAudio(msg.mediaBase64);
-        content = `[Transcrição de áudio]: ${transcript}`;
+        if (!transcript || transcript.startsWith('[Áudio')) {
+          // Whisper não pegou fala — pede pro cliente repetir/digitar.
+          content = '[sistema: o cliente enviou um áudio, mas a transcrição ficou vazia. Peça educadamente para ele repetir ou enviar por texto.]';
+        } else {
+          content = transcript;
+        }
       } catch (err: any) {
-        console.error('[webhook] Erro ao transcrever áudio:', err.message);
-        content = '[Cliente enviou um áudio, mas não foi possível transcrever]';
+        console.error('[webhook] Erro ao transcrever áudio:', err?.message);
+        content = '[sistema: falha técnica ao transcrever o áudio do cliente. Peça educadamente para ele repetir ou enviar por texto.]';
       }
     } else if (msg.type === 'audio') {
-      console.warn('[webhook] áudio sem base64 nem transcrição — ignorando transcrição');
-      content = '[Cliente enviou um áudio, mas não foi possível processar]';
+      console.warn('[webhook] áudio sem base64 nem transcrição');
+      content = '[sistema: o áudio do cliente não pôde ser baixado. Peça educadamente para ele repetir ou enviar por texto.]';
     } else if (msg.type === 'image' && msg.mediaBase64) {
       // Imagem é passada diretamente para a Serena ver
       imageBase64ForSerena = msg.mediaBase64;

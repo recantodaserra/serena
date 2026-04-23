@@ -103,18 +103,55 @@ export const WhatsApp = {
     });
   },
 
-  async fetchMediaBase64(messageId: string): Promise<string | undefined> {
-    try {
-      const res = await fetch(`${BASE_URL}/chat/getBase64FromMediaMessage/${INSTANCE}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: API_KEY },
-        body: JSON.stringify({ message: { key: { id: messageId } }, convertToMp4: false })
-      });
-      if (!res.ok) return undefined;
-      const data = await res.json();
-      return (data.base64 as string) || undefined;
-    } catch {
-      return undefined;
-    }
+  // Busca o base64 da mídia via Evolution API.
+  // Evolution v2 NORMALMENTE precisa do objeto message completo (key + message
+  // nested com mediaKey/fileEncSha256/etc) pra descriptografar. Passar só
+  // { key: { id } } funciona às vezes (se a msg ainda está no cache interno),
+  // mas é frágil. Se o caller tem o `data` completo do webhook, passamos ele.
+  //
+  // Retry: WhatsApp às vezes demora 1-2s pra persistir a mídia após o webhook
+  // chegar. Se a 1ª tentativa falhar com erro específico, espera e tenta de novo.
+  async fetchMediaBase64(messageId: string, fullMessage?: any): Promise<string | undefined> {
+    const payload = fullMessage
+      ? { message: fullMessage, convertToMp4: false }
+      : { message: { key: { id: messageId } }, convertToMp4: false };
+
+    const attempt = async (attemptNum: number): Promise<string | undefined> => {
+      try {
+        const res = await fetch(`${BASE_URL}/chat/getBase64FromMediaMessage/${INSTANCE}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: API_KEY },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          console.warn(
+            `[whatsapp] fetchMediaBase64 tentativa ${attemptNum} falhou: status=${res.status} body=${text.slice(0, 200)}`
+          );
+          return undefined;
+        }
+        const data = await res.json();
+        const b64 = (data?.base64 as string) || undefined;
+        if (!b64 || b64.length < 100) {
+          console.warn(
+            `[whatsapp] fetchMediaBase64 tentativa ${attemptNum} retornou base64 vazio/pequeno (len=${b64?.length || 0})`
+          );
+          return undefined;
+        }
+        return b64;
+      } catch (err: any) {
+        console.error(
+          `[whatsapp] fetchMediaBase64 tentativa ${attemptNum} erro: ${err?.message || err}`
+        );
+        return undefined;
+      }
+    };
+
+    const first = await attempt(1);
+    if (first) return first;
+
+    // 2ª tentativa após 1.5s — dá tempo pro WhatsApp terminar de persistir a mídia
+    await sleep(1500);
+    return attempt(2);
   }
 };
