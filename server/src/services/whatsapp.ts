@@ -112,16 +112,18 @@ async function sendPresence(to: string, durationMs: number) {
   try {
     // Tenta formato top-level (Evolution v2+).
     await post(`/chat/sendPresence/${INSTANCE}`, payload);
+    return;
   } catch (err) {
+    console.warn('[whatsapp] sendPresence v2 falhou:', (err as Error).message);
     // Fallback: formato antigo (Evolution v1) com options.
     try {
       await post(`/chat/sendPresence/${INSTANCE}`, {
         number,
         options: { delay: durationMs, presence: 'composing' }
       });
+      return;
     } catch (err2) {
-      // Se nada funciona, seguimos sem typing — não bloqueia o envio.
-      console.warn('[whatsapp] sendPresence falhou (ignorado):', (err as Error).message);
+      console.warn('[whatsapp] sendPresence v1 também falhou — seguindo sem typing:', (err2 as Error).message);
     }
   }
 }
@@ -141,6 +143,7 @@ export const WhatsApp = {
   // Envia resposta longa quebrada em blocos com typing real entre cada um.
   async sendBlocks(to: string, text: string) {
     const blocks = splitIntoBlocks(text);
+    console.log(`[whatsapp] sendBlocks -> ${blocks.length} bloco(s) para ${to}`);
 
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
@@ -148,6 +151,8 @@ export const WhatsApp = {
       // Duração do typing proporcional ao tamanho do bloco.
       // 30ms/caractere, mínimo 900ms, máximo 3500ms.
       const typingMs = Math.min(Math.max(block.length * 30, 900), 3500);
+
+      console.log(`[whatsapp] bloco ${i + 1}/${blocks.length} len=${block.length} typing=${typingMs}ms`);
 
       // 1) Dispara o "digitando..." explicitamente.
       await sendPresence(to, typingMs);

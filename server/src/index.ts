@@ -140,6 +140,7 @@ app.get('/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString()
 
 app.listen(PORT, () => {
   console.log(`✅ Servidor Recanto da Serra rodando na porta ${PORT}`);
+  console.log(`   Build: buffer+blocos+typing+takeover (${new Date().toISOString()})`);
   console.log(`   Webhook: POST http://localhost:${PORT}/webhook/whatsapp`);
   console.log(`   API: GET http://localhost:${PORT}/api/conversations`);
 });

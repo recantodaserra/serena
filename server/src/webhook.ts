@@ -77,6 +77,10 @@ export async function handleWebhook(req: Request, res: Response) {
   const parsed = parseEvolutionPayload(req.body);
   if (!parsed) return;
 
+  console.log(
+    `[webhook] IN phone=${parsed.phone} fromMe=${parsed.fromMe} type=${parsed.type} msgId=${parsed.messageId || 'n/a'} content="${parsed.content.slice(0, 60)}"`
+  );
+
   if (ALLOWED_PHONES.length > 0 && !ALLOWED_PHONES.includes(parsed.phone)) {
     console.log(`[webhook] Número ${parsed.phone} bloqueado pelo filtro`);
     return;
@@ -86,7 +90,11 @@ export async function handleWebhook(req: Request, res: Response) {
   //   (a) Nossa API (Serena ou endpoint manual do CRM) → é eco, ignorar.
   //   (b) Humano digitando direto no WhatsApp do celular → assumir a conversa.
   if (parsed.fromMe) {
-    if (wasSentByApi(parsed.messageId)) return;
+    if (wasSentByApi(parsed.messageId)) {
+      console.log(`[webhook] fromMe reconhecido como eco da API (${parsed.messageId}), ignorando.`);
+      return;
+    }
+    console.log(`[webhook] fromMe NÃO reconhecido — humano assumiu via celular.`);
     await handleHumanTakeoverFromPhone(parsed);
     return;
   }
@@ -127,6 +135,7 @@ export async function handleWebhook(req: Request, res: Response) {
     }
 
     // Enfileira no buffer — aguarda 30s de silêncio antes de chamar a Serena
+    console.log(`[webhook] Enfileirando no buffer (aguarda 30s de silêncio): ${phone}`);
     bufferMessage(
       phone,
       conv.id,
@@ -212,7 +221,13 @@ async function processBufferedMessages(
   // Combina todas as mensagens do buffer em uma única entrada para a IA
   const combinedContent = contentParts.join('\n');
 
+  console.log(`[buffer] Flush ${phone} — ${messages.length} msg(s) acumulada(s). Chamando Serena…`);
   const result = await runSerena(conversationId, phone, combinedContent, imageBase64ForSerena);
+
+  const hasDoubleBreak = /\n\s*\n/.test(result.text);
+  console.log(
+    `[serena] Resposta: len=${result.text.length} hasDoubleBreak=${hasDoubleBreak} transfer=${result.transfer?.reason || 'no'}`
+  );
 
   // Salva resposta da Serena no banco
   await MessageService.save({
