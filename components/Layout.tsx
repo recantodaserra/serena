@@ -171,7 +171,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-white/40 uppercase tracking-wider">
             <p>&copy; {new Date().getFullYear()} Recanto da Serra.</p>
             <div className="flex gap-6 items-center">
-              <a href="#" className="hover:text-white transition-colors">Políticas</a>
+              <Link to="/politicas" className="hover:text-white transition-colors">Políticas</Link>
               {user ? (
                 <button
                   onClick={() => signOut()}

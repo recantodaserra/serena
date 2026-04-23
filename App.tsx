@@ -13,6 +13,7 @@ import Gallery from './components/Gallery';
 import Location from './components/Location';
 import ChatPage from './components/Chat';
 import Login from './components/Login';
+import Policies from './components/Policies';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WHATSAPP_NUMBER } from './constants';
 import { ReservationService, ChaletService, SiteService, PricingService, Reservation, CustomPrice } from './services/storage';
@@ -444,6 +445,7 @@ const App: React.FC = () => {
             <Route path="/chale/:slug" element={<ChaletDetailsWrapper />} />
             <Route path="/galeria" element={<Gallery />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/politicas" element={<Policies />} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
             <Route path="/conversas" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
           </Routes>
