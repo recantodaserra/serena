@@ -5,6 +5,7 @@ export interface BufferedMessage {
   type: string;
   mediaBase64?: string;
   mediaUrl?: string;
+  audioTranscript?: string;
 }
 
 type FlushCallback = (

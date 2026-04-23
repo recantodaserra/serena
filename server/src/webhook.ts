@@ -13,6 +13,7 @@ interface ParsedMessage {
   type: string;
   mediaBase64?: string;
   mediaUrl?: string;
+  audioTranscript?: string;
   fromMe: boolean;
   messageId?: string;
 }
@@ -35,6 +36,7 @@ function parseEvolutionPayload(body: any): ParsedMessage | null {
     let type = 'text';
     let mediaUrl: string | undefined;
     let mediaBase64: string | undefined;
+    let audioTranscript: string | undefined;
 
     if (msg.conversation) {
       content = msg.conversation;
@@ -49,6 +51,13 @@ function parseEvolutionPayload(body: any): ParsedMessage | null {
       type = 'audio';
       content = '[Áudio]';
       mediaBase64 = data.message?.base64 || msg.audioMessage?.base64;
+      // Se a Evolution está configurada para transcrever áudios (OpenAI bot),
+      // a transcrição já chega no payload e pode ser usada direto sem Whisper.
+      audioTranscript =
+        data.message?.speechToText ||
+        msg.speechToText ||
+        msg.audioMessage?.speechToText ||
+        data.speechToText;
     } else if (msg.documentMessage) {
       type = 'document';
       content = msg.documentMessage.caption || '[Documento]';
@@ -61,7 +70,7 @@ function parseEvolutionPayload(body: any): ParsedMessage | null {
       return null;
     }
 
-    return { phone, content, type, mediaUrl, mediaBase64, fromMe, messageId };
+    return { phone, content, type, mediaUrl, mediaBase64, audioTranscript, fromMe, messageId };
   } catch {
     return null;
   }
@@ -136,14 +145,32 @@ export async function handleWebhook(req: Request, res: Response) {
       console.log(`[webhook] ${phone} reativada para IA (silêncio expirou)`);
     }
 
-    // Para áudio sem base64 no payload, busca na Evolution API (igual ao n8n).
+    // Para áudio: se a Evolution já entregou a transcrição (bot OpenAI ativo),
+    // usamos ela direto — economiza chamada ao Whisper. Senão tenta base64 do
+    // webhook; se não veio, busca via API (padrão n8n).
     let resolvedBase64 = mediaBase64;
-    if (type === 'audio' && !resolvedBase64 && parsed.messageId) {
-      resolvedBase64 = await WhatsApp.fetchMediaBase64(parsed.messageId);
-      if (resolvedBase64) {
-        console.log(`[webhook] base64 do áudio buscado via API para msgId=${parsed.messageId}`);
+    let resolvedTranscript = parsed.audioTranscript;
+
+    if (type === 'audio') {
+      if (resolvedTranscript) {
+        console.log(
+          `[webhook] áudio já veio transcrito pela Evolution (len=${resolvedTranscript.length}): "${resolvedTranscript.slice(0, 80)}"`
+        );
       } else {
-        console.warn(`[webhook] não foi possível obter base64 do áudio msgId=${parsed.messageId}`);
+        const hasB64Inline = !!resolvedBase64;
+        console.log(
+          `[webhook] áudio msgId=${parsed.messageId} inlineBase64=${hasB64Inline}${hasB64Inline ? ` (${resolvedBase64!.length} chars)` : ''}`
+        );
+        if (!resolvedBase64 && parsed.messageId) {
+          resolvedBase64 = await WhatsApp.fetchMediaBase64(parsed.messageId);
+          if (resolvedBase64) {
+            console.log(
+              `[webhook] base64 buscado via API para msgId=${parsed.messageId} (${resolvedBase64.length} chars)`
+            );
+          } else {
+            console.warn(`[webhook] não foi possível obter base64 do áudio msgId=${parsed.messageId}`);
+          }
+        }
       }
     }
 
@@ -152,7 +179,7 @@ export async function handleWebhook(req: Request, res: Response) {
     bufferMessage(
       phone,
       conv.id,
-      { content, type, mediaBase64: resolvedBase64, mediaUrl },
+      { content, type, mediaBase64: resolvedBase64, mediaUrl, audioTranscript: resolvedTranscript },
       processBufferedMessages
     ).catch(err => console.error(`[webhook] Erro no bufferMessage de ${phone}:`, err.message));
 
@@ -212,7 +239,10 @@ async function processBufferedMessages(
   for (const msg of messages) {
     let content = msg.content;
 
-    if (msg.type === 'audio' && msg.mediaBase64) {
+    if (msg.type === 'audio' && msg.audioTranscript) {
+      // Evolution já transcreveu — usa direto.
+      content = `[Transcrição de áudio]: ${msg.audioTranscript}`;
+    } else if (msg.type === 'audio' && msg.mediaBase64) {
       try {
         const transcript = await transcribeAudio(msg.mediaBase64);
         content = `[Transcrição de áudio]: ${transcript}`;
@@ -220,6 +250,9 @@ async function processBufferedMessages(
         console.error('[webhook] Erro ao transcrever áudio:', err.message);
         content = '[Cliente enviou um áudio, mas não foi possível transcrever]';
       }
+    } else if (msg.type === 'audio') {
+      console.warn('[webhook] áudio sem base64 nem transcrição — ignorando transcrição');
+      content = '[Cliente enviou um áudio, mas não foi possível processar]';
     } else if (msg.type === 'image' && msg.mediaBase64) {
       // Imagem é passada diretamente para a Serena ver
       imageBase64ForSerena = msg.mediaBase64;
