@@ -136,12 +136,23 @@ export async function handleWebhook(req: Request, res: Response) {
       console.log(`[webhook] ${phone} reativada para IA (silêncio expirou)`);
     }
 
+    // Para áudio sem base64 no payload, busca na Evolution API (igual ao n8n).
+    let resolvedBase64 = mediaBase64;
+    if (type === 'audio' && !resolvedBase64 && parsed.messageId) {
+      resolvedBase64 = await WhatsApp.fetchMediaBase64(parsed.messageId);
+      if (resolvedBase64) {
+        console.log(`[webhook] base64 do áudio buscado via API para msgId=${parsed.messageId}`);
+      } else {
+        console.warn(`[webhook] não foi possível obter base64 do áudio msgId=${parsed.messageId}`);
+      }
+    }
+
     // Enfileira no buffer — aguarda 30s de silêncio antes de chamar a Serena.
     // Fire-and-forget: o webhook já respondeu 200, não espera o debounce.
     bufferMessage(
       phone,
       conv.id,
-      { content, type, mediaBase64, mediaUrl },
+      { content, type, mediaBase64: resolvedBase64, mediaUrl },
       processBufferedMessages
     ).catch(err => console.error(`[webhook] Erro no bufferMessage de ${phone}:`, err.message));
 

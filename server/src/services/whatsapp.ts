@@ -101,5 +101,20 @@ export const WhatsApp = {
         console.error(`[whatsapp] Falha ao notificar ${phones[i]}:`, (r.reason as Error)?.message);
       }
     });
+  },
+
+  async fetchMediaBase64(messageId: string): Promise<string | undefined> {
+    try {
+      const res = await fetch(`${BASE_URL}/chat/getBase64FromMediaMessage/${INSTANCE}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: API_KEY },
+        body: JSON.stringify({ message: { key: { id: messageId } }, convertToMp4: false })
+      });
+      if (!res.ok) return undefined;
+      const data = await res.json();
+      return (data.base64 as string) || undefined;
+    } catch {
+      return undefined;
+    }
   }
 };
