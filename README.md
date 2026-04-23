@@ -1,20 +1,59 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Recanto da Serra
 
-# Run and deploy your AI Studio app
+Sistema de reservas e gestão para o Recanto da Serra — resort com chalés na natureza.
 
-This contains everything you need to run your app locally.
+## Tecnologias
 
-View your app in AI Studio: https://ai.studio/apps/c1607a20-d9df-434e-8666-028adc39ba9c
+- **Frontend:** React 18 + TypeScript + Vite + Tailwind CSS
+- **Backend:** Node.js + Express + TypeScript
+- **Banco de Dados:** Supabase (PostgreSQL)
+- **IA:** Agente Serena (OpenAI GPT-4) via Evolution API (WhatsApp)
+- **Cache:** Redis (Upstash)
 
-## Run Locally
+## Estrutura
 
-**Prerequisites:**  Node.js
+```
+recanto-da-serra/
+├── components/       # Componentes React (Admin, ChaletDetails, Chat, etc.)
+├── contexts/         # AuthContext (Supabase Auth)
+├── services/         # Camada de acesso ao Supabase
+├── utils/            # Helpers (formatCurrency, getAmenityIcon, imageCompression)
+├── server/           # Backend Express + agente Serena
+└── public/           # Assets estáticos
+```
 
+## Rodar localmente
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+**Pré-requisitos:** Node.js 18+
+
+1. Instale as dependências do frontend:
+   ```bash
+   npm install
+   ```
+
+2. Configure as variáveis de ambiente — crie um `.env` na raiz:
+   ```
+   VITE_SUPABASE_URL=...
+   VITE_SUPABASE_ANON_KEY=...
+   ```
+
+3. Instale as dependências do backend e configure `server/.env` (veja `server/.env.example`):
+   ```bash
+   cd server && npm install
+   ```
+
+4. Rode o frontend e o backend em paralelo:
+   ```bash
+   # Terminal 1 — Frontend
+   npm run dev
+
+   # Terminal 2 — Backend
+   cd server && npm run dev
+   ```
+
+## Deploy
+
+- **Frontend:** Vercel (build `npm run build`, output `dist/`)
+- **Backend:** Easypanel
+- **Banco:** Supabase Cloud
+- **Cache:** Upstash Redis

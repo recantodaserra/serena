@@ -14,15 +14,12 @@ import {
 import { Link } from 'react-router-dom';
 import ChatPage from './Chat';
 import AgentConfigManager from './AgentConfig';
-import { 
-  format, addDays, endOfMonth, eachDayOfInterval, isSameDay, addMonths, 
-  getDay, isWithinInterval, parseISO, startOfMonth, subMonths 
+import {
+  format, addDays, endOfMonth, eachDayOfInterval, isSameDay, addMonths,
+  getDay, isWithinInterval, parseISO, startOfMonth, subMonths
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-};
+import { formatCurrency } from '../utils/helpers';
 
 // --- MODAL COM CONFIRMAÇÃO VISUAL (SEM window.confirm) ---
 interface ReservationDetailModalProps {
