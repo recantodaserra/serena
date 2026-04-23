@@ -141,7 +141,7 @@ const AgentConfigManager: React.FC = () => {
       )}
       <ol className="text-xs text-red-700 space-y-1 list-decimal list-inside mb-4">
         <li>Abra <code className="bg-white px-1 rounded">{API}/health</code> em outra aba — se não carregar, o servidor está fora do ar.</li>
-        <li>Verifique os logs do deploy (Railway / Easypanel).</li>
+        <li>Verifique os logs do deploy no Easypanel.</li>
         <li>Confirme se <code className="bg-white px-1 rounded">VITE_API_URL</code> no Vercel aponta pro backend correto.</li>
       </ol>
       <button

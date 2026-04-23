@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './constants';
 
 // Valida que as chaves estão presentes e que a URL tem formato mínimo válido.
-// Se um painel (Vercel/Railway) entregou a chave com \n, espaço ou char de
+// Se um painel (Vercel/Easypanel) entregou a chave com \n, espaço ou char de
 // controle, constants.cleanEnv já removeu — aqui garantimos que o que sobrou
 // é utilizável antes de criar o client.
 const isValidHttpUrl = (u: string) => /^https?:\/\/[^\s]+$/.test(u);
