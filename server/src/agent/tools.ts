@@ -65,6 +65,16 @@ export async function executeTool(tool: ToolInput, phone: string): Promise<ToolR
   }
 }
 
+// Retorna true se o período contém segunda-feira (dia fechado, preço=0)
+function hasMondayInRange(start: string, end: string): boolean {
+  let curr = start;
+  while (curr < end) {
+    if (dayOfWeek(curr) === 1) return true;
+    curr = addDays(curr, 1);
+  }
+  return false;
+}
+
 async function toolVerificarDisponibilidade(input: Record<string, unknown>): Promise<ToolResult> {
   const entrada = parseDate(String(input.dataDeEntrada));
   const saida = parseDate(String(input.dataDeSaida));
@@ -75,6 +85,10 @@ async function toolVerificarDisponibilidade(input: Record<string, unknown>): Pro
 
   const nights = dateDiff(entrada, saida);
   if (nights < 1) return { type: 'text', text: 'O mínimo é 1 diária.' };
+
+  if (hasMondayInRange(entrada, saida)) {
+    return { type: 'text', text: `O período de ${input.dataDeEntrada} a ${input.dataDeSaida} inclui uma segunda-feira, e o Recanto da Serra não recebe hóspedes às segundas. Que tal ajustar as datas? 😊` };
+  }
 
   const chalets = await ReservationDB.getChalets();
   const results: string[] = [];

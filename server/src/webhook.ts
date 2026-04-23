@@ -135,7 +135,6 @@ export async function handleWebhook(req: Request, res: Response) {
     }
 
     // Enfileira no buffer — aguarda 30s de silêncio antes de chamar a Serena
-    console.log(`[webhook] Enfileirando no buffer (aguarda 30s de silêncio): ${phone}`);
     bufferMessage(
       phone,
       conv.id,
@@ -221,7 +220,6 @@ async function processBufferedMessages(
   // Combina todas as mensagens do buffer em uma única entrada para a IA
   const combinedContent = contentParts.join('\n');
 
-  console.log(`[buffer] Flush ${phone} — ${messages.length} msg(s) acumulada(s). Chamando Serena…`);
   const result = await runSerena(conversationId, phone, combinedContent, imageBase64ForSerena);
 
   const hasDoubleBreak = /\n\s*\n/.test(result.text);

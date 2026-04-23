@@ -5,7 +5,7 @@ import { handleWebhook } from './webhook.js';
 import { supabase } from './services/supabase.js';
 import { WhatsApp } from './services/whatsapp.js';
 import { getAgentConfig, saveAgentConfig, invalidateConfigCache } from './services/agent_config.js';
-import { cancelBuffer } from './services/messageBuffer.js';
+import { cancelBuffer, bufferSnapshot } from './services/messageBuffer.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -138,9 +138,13 @@ app.put('/api/agent-config', async (req, res) => {
 
 app.get('/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
+// Diagnóstico: estado do buffer de mensagens. Útil para verificar em produção
+// se o agente está realmente acumulando mensagens picadas por 30s.
+app.get('/debug/buffer', (_, res) => res.json(bufferSnapshot()));
+
 app.listen(PORT, () => {
   console.log(`✅ Servidor Recanto da Serra rodando na porta ${PORT}`);
-  console.log(`   Build: buffer+blocos+typing+takeover (${new Date().toISOString()})`);
+  console.log(`   Build: buffer30s+blocos160ch+delay-nativo (${new Date().toISOString()})`);
   console.log(`   Webhook: POST http://localhost:${PORT}/webhook/whatsapp`);
   console.log(`   API: GET http://localhost:${PORT}/api/conversations`);
 });

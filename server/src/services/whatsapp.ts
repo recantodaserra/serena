@@ -5,8 +5,6 @@ const BASE_URL = process.env.EVOLUTION_API_URL!;
 const API_KEY = process.env.EVOLUTION_API_KEY!;
 const INSTANCE = process.env.EVOLUTION_INSTANCE || 'Recanto';
 
-// Extrai o ID da mensagem do retorno da Evolution, testando os formatos
-// conhecidos (v1 e v2). Qualquer um que vier, registramos para deduplicação.
 function extractMessageId(response: any): string | undefined {
   if (!response) return undefined;
   return response?.key?.id
@@ -32,54 +30,53 @@ async function post(path: string, body: object) {
   return res.json();
 }
 
-// Quebra o texto em blocos para envio separado.
-// Estratégia:
-//   1. Divide por dupla quebra de linha (parágrafos explícitos da IA).
-//   2. Se um parágrafo passa de maxLen, subdivide por linhas simples.
-//   3. Se ainda estiver grande (ou se veio tudo sem \n), subdivide por sentenças.
-// Isso garante blocos pequenos mesmo quando o modelo devolve textão.
-function splitIntoBlocks(text: string, maxLen = 280): string[] {
-  const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+// Tamanho-alvo de cada bloco enviado ao WhatsApp.
+// 160 chars é o sweet spot: cabe uma ou duas frases, força a IA a parecer
+// humana (ninguém digita paredão de texto), e evita fadiga de leitura.
+const MAX_BLOCK_LEN = 160;
+
+// Quebra o texto em blocos pequenos.
+// Estratégia em cascata:
+//   1. Divide por dupla quebra de linha (parágrafos que a IA marcou).
+//   2. Cada parágrafo é subdividido por sentenças (. ! ? :).
+//   3. Sentenças são agrupadas até MAX_BLOCK_LEN caracteres.
+// Isso funciona mesmo se a IA devolver textão sem \n\n.
+function splitIntoBlocks(text: string): string[] {
+  const clean = text.replace(/\r\n/g, '\n').trim();
+  if (!clean) return [];
+
+  const paragraphs = clean.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
   const blocks: string[] = [];
 
   for (const para of paragraphs) {
-    if (para.length <= maxLen) {
-      blocks.push(para);
-      continue;
-    }
-
-    // Parágrafo grande: agrupa linhas simples até o limite.
+    // Linhas internas do parágrafo: se o modelo gerou uma lista com \n, cada
+    // linha já é um "chunk" natural. Caso contrário, caímos em splitBySentences.
     const lines = para.split('\n').map(l => l.trim()).filter(Boolean);
-    let current = '';
+
     for (const line of lines) {
-      if (line.length > maxLen) {
-        if (current) { blocks.push(current); current = ''; }
-        // Linha única gigante — quebra por sentenças.
-        blocks.push(...splitBySentences(line, maxLen));
-        continue;
-      }
-      if (!current) {
-        current = line;
-      } else if (current.length + 1 + line.length <= maxLen) {
-        current += '\n' + line;
+      if (line.length <= MAX_BLOCK_LEN) {
+        blocks.push(line);
       } else {
-        blocks.push(current);
-        current = line;
+        blocks.push(...splitBySentences(line, MAX_BLOCK_LEN));
       }
     }
-    if (current) blocks.push(current);
   }
 
-  // Fallback final: texto sem nenhuma quebra (\n) e > maxLen.
-  if (blocks.length === 0 || (blocks.length === 1 && blocks[0].length > maxLen)) {
-    return splitBySentences(text.trim(), maxLen);
+  // Junta blocos adjacentes pequenos para não ficar hiper-picotado
+  // (ex: "Olá!" + "Tudo bem?" → "Olá! Tudo bem?" se couber).
+  const merged: string[] = [];
+  for (const b of blocks) {
+    const last = merged[merged.length - 1];
+    if (last && last.length + 1 + b.length <= MAX_BLOCK_LEN) {
+      merged[merged.length - 1] = last + ' ' + b;
+    } else {
+      merged.push(b);
+    }
   }
 
-  return blocks;
+  return merged;
 }
 
-// Divide um texto longo em blocos menores cortando em fim de sentença
-// (., !, ?, :) e agrupando até o limite.
 function splitBySentences(text: string, maxLen: number): string[] {
   const sentences = text.match(/[^.!?:\n]+[.!?:]+[\s)]*|[^.!?:\n]+$/g);
   if (!sentences) return [text];
@@ -101,70 +98,78 @@ function splitBySentences(text: string, maxLen: number): string[] {
   }
   if (current) blocks.push(current);
 
-  return blocks.length > 0 ? blocks : [text];
+  // Se uma única sentença ainda passa do limite (cliente escreveu um período
+  // gigante sem pontuação), corta por palavras como fallback duro.
+  const out: string[] = [];
+  for (const b of blocks) {
+    if (b.length <= maxLen * 1.3) { out.push(b); continue; }
+    out.push(...splitByWords(b, maxLen));
+  }
+  return out.length > 0 ? out : [text];
 }
 
-// Envia indicador "digitando..." para o número pelo tempo especificado.
-// Usa endpoint dedicado sendPresence para funcionar em qualquer versão da Evolution.
-async function sendPresence(to: string, durationMs: number) {
-  const number = to.startsWith('55') ? to : `55${to}`;
-  const payload = { number, delay: durationMs, presence: 'composing' };
-  try {
-    // Tenta formato top-level (Evolution v2+).
-    await post(`/chat/sendPresence/${INSTANCE}`, payload);
-    return;
-  } catch (err) {
-    console.warn('[whatsapp] sendPresence v2 falhou:', (err as Error).message);
-    // Fallback: formato antigo (Evolution v1) com options.
-    try {
-      await post(`/chat/sendPresence/${INSTANCE}`, {
-        number,
-        options: { delay: durationMs, presence: 'composing' }
-      });
-      return;
-    } catch (err2) {
-      console.warn('[whatsapp] sendPresence v1 também falhou — seguindo sem typing:', (err2 as Error).message);
-    }
+function splitByWords(text: string, maxLen: number): string[] {
+  const words = text.split(/\s+/);
+  const out: string[] = [];
+  let current = '';
+  for (const w of words) {
+    if (!current) { current = w; continue; }
+    if (current.length + 1 + w.length <= maxLen) current += ' ' + w;
+    else { out.push(current); current = w; }
   }
+  if (current) out.push(current);
+  return out;
+}
+
+// Duração do typing proporcional ao tamanho do bloco.
+// Heurística: ~25 caracteres por segundo (digitação rápida), com piso de
+// 800ms (pra aparecer no celular) e teto de 2500ms (pra não parecer trava).
+function typingMsFor(block: string): number {
+  const ms = Math.round(block.length * 40);
+  return Math.min(Math.max(ms, 800), 2500);
 }
 
 export const WhatsApp = {
-  // Envia texto simples, sem typing.
-  async sendText(to: string, text: string) {
+  // Envia texto com typing embutido.
+  // O parâmetro `delay` no próprio /message/sendText é a forma NATIVA da
+  // Evolution de mostrar "digitando..." por X ms antes de entregar — isso
+  // é muito mais confiável do que um sendPresence separado (que depende da
+  // versão da Evolution e tem formato de payload diferente em v1 vs v2).
+  async sendText(to: string, text: string, delayMs = 0) {
     const number = to.startsWith('55') ? to : `55${to}`;
-    // Formato v2 (top-level). Evolution v1 aceita os mesmos campos se existirem.
-    const response = await post(`/message/sendText/${INSTANCE}`, { number, text });
-    // Registra o messageId para que o webhook saiba que esse eco é nosso,
-    // não uma mensagem digitada pelo humano no celular.
+    const body: Record<string, any> = { number, text };
+    if (delayMs > 0) body.delay = delayMs;
+    const response = await post(`/message/sendText/${INSTANCE}`, body);
     trackOutgoing(extractMessageId(response));
     return response;
   },
 
-  // Envia resposta longa quebrada em blocos com typing real entre cada um.
+  // Envia resposta quebrada em blocos com typing real entre cada um.
   async sendBlocks(to: string, text: string) {
     const blocks = splitIntoBlocks(text);
-    console.log(`[whatsapp] sendBlocks -> ${blocks.length} bloco(s) para ${to}`);
+    console.log(
+      `[whatsapp] sendBlocks -> ${blocks.length} bloco(s) para ${to} (tamanhos: ${blocks.map(b => b.length).join(',')})`
+    );
 
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
+      const delayMs = typingMsFor(block);
 
-      // Duração do typing proporcional ao tamanho do bloco.
-      // 30ms/caractere, mínimo 900ms, máximo 3500ms.
-      const typingMs = Math.min(Math.max(block.length * 30, 900), 3500);
+      console.log(`[whatsapp] bloco ${i + 1}/${blocks.length} len=${block.length} typing=${delayMs}ms`);
 
-      console.log(`[whatsapp] bloco ${i + 1}/${blocks.length} len=${block.length} typing=${typingMs}ms`);
-
-      // 1) Dispara o "digitando..." explicitamente.
-      await sendPresence(to, typingMs);
-      // 2) Aguarda a presença ser renderizada no cliente e durar o tempo.
-      await sleep(typingMs);
-      // 3) Envia a mensagem.
-      await WhatsApp.sendText(to, block);
-
-      // Pequena pausa entre blocos para parecer natural.
-      if (i < blocks.length - 1) {
-        await sleep(600);
+      try {
+        // delay embutido: a Evolution mostra "digitando..." por delayMs,
+        // depois entrega a mensagem. Simples e robusto.
+        await WhatsApp.sendText(to, block, delayMs);
+      } catch (err: any) {
+        console.error(`[whatsapp] falha no bloco ${i + 1}/${blocks.length}:`, err.message);
+        // Não interrompe: tenta entregar os blocos restantes para o cliente
+        // não ficar com a resposta pela metade.
       }
+
+      // Respiro entre blocos (o próprio delay já gera pausa, mas um gap
+      // extra evita que o WhatsApp agrupe as mensagens lado a lado).
+      if (i < blocks.length - 1) await sleep(400);
     }
   },
 
