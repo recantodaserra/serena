@@ -1,3 +1,5 @@
+import { Redis, redisConfigured } from './redis.js';
+
 export interface BufferedMessage {
   content: string;
   type: string;
@@ -11,92 +13,135 @@ type FlushCallback = (
   messages: BufferedMessage[]
 ) => Promise<void>;
 
-interface BufferEntry {
-  messages: BufferedMessage[];
-  conversationId: string;
-  timer: ReturnType<typeof setTimeout>;
-  firstAt: number;
-}
-
-const buffer = new Map<string, BufferEntry>();
-const processing = new Set<string>();
-
 const BUFFER_DELAY_MS = 30000;
-const PROCESSING_RETRY_MS = 1500;
+const REDIS_TTL_SEC = 120;
 
-export function bufferMessage(
+function msgsKey(phone: string) { return `rs:buf:${phone}`; }
+function convKey(phone: string) { return `rs:conv:${phone}`; }
+
+// Lock em memória para evitar 2 flushes concorrentes pro mesmo phone
+// (caso a comparação de snapshot casse com timing idêntico).
+const flushing = new Set<string>();
+
+function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
+// Padrão de buffer por DEBOUNCE com snapshot no Redis (igual ao n8n):
+//   1. PUSH a mensagem na lista Redis (rs:buf:{phone}).
+//   2. Lê o snapshot atual (LLEN).
+//   3. Espera 30s.
+//   4. Lê o snapshot de novo.
+//   5. Se iguais → ninguém mais chegou → EU sou o último, faço flush.
+//      Se diferentes → outra execução chegou depois → eu morro, ela vai flushar.
+//
+// Vantagens: sem timer em memória, funciona com múltiplas réplicas, reinício
+// de servidor não perde mensagens (elas ficam no Redis com TTL de 2min).
+export async function bufferMessage(
   phone: string,
   conversationId: string,
   message: BufferedMessage,
   onFlush: FlushCallback
-): void {
-  const existing = buffer.get(phone);
-  const now = Date.now();
-
-  if (existing) {
-    clearTimeout(existing.timer);
-    existing.messages.push(message);
-    existing.timer = setTimeout(() => flush(phone, onFlush), BUFFER_DELAY_MS);
-    const waited = Math.round((now - existing.firstAt) / 1000);
-    console.log(
-      `[buffer] +1 msg para ${phone} (total=${existing.messages.length}, aguardando 30s desde esta última; acumulando há ${waited}s)`
-    );
-  } else {
-    buffer.set(phone, {
-      messages: [message],
-      conversationId,
-      timer: setTimeout(() => flush(phone, onFlush), BUFFER_DELAY_MS),
-      firstAt: now
-    });
-    console.log(`[buffer] NOVO buffer para ${phone} — timer de 30s iniciado`);
-  }
-}
-
-function flush(phone: string, onFlush: FlushCallback): void {
-  const entry = buffer.get(phone);
-  if (!entry) return;
-
-  if (processing.has(phone)) {
-    console.log(`[buffer] ${phone} ainda processando rodada anterior — reagendando em ${PROCESSING_RETRY_MS}ms`);
-    entry.timer = setTimeout(() => flush(phone, onFlush), PROCESSING_RETRY_MS);
+): Promise<void> {
+  if (!redisConfigured) {
+    console.error('[buffer] Redis não configurado — mensagem NÃO será buferada. Configure UPSTASH_REDIS_REST_URL e UPSTASH_REDIS_REST_TOKEN.');
+    await onFlush(conversationId, phone, [message]);
     return;
   }
 
-  buffer.delete(phone);
-  processing.add(phone);
+  try {
+    // 1. Push + marca conversationId + renova TTL
+    await Promise.all([
+      Redis.rpush(msgsKey(phone), JSON.stringify(message)),
+      Redis.expire(msgsKey(phone), REDIS_TTL_SEC),
+      Redis.set(convKey(phone), conversationId, REDIS_TTL_SEC)
+    ]);
 
-  const elapsed = Math.round((Date.now() - entry.firstAt) / 1000);
-  console.log(
-    `[buffer] FLUSH ${phone} — ${entry.messages.length} msg(s) acumulada(s) em ${elapsed}s. Chamando Serena…`
-  );
+    // 2. Snapshot antes do wait
+    const before = await Redis.llen(msgsKey(phone));
+    console.log(`[buffer] ${phone} +1 msg (total=${before}). Aguardando 30s…`);
 
-  onFlush(entry.conversationId, phone, entry.messages)
-    .catch(err => console.error(`[buffer] Erro ao processar mensagens de ${phone}:`, err.message))
-    .finally(() => {
-      processing.delete(phone);
-      console.log(`[buffer] ${phone} processing liberado`);
-    });
+    // 3. Espera 30s
+    await sleep(BUFFER_DELAY_MS);
+
+    // 4. Snapshot depois
+    const after = await Redis.llen(msgsKey(phone));
+
+    // 5. Se chegou nova msg durante o wait, outra execução vai flushar
+    if (after !== before) {
+      console.log(`[buffer] ${phone} outra msg chegou (${before}→${after}) — essa execução não flusha`);
+      return;
+    }
+
+    // Se a key sumiu (after=0), significa cancelBuffer ou flush concorrente
+    if (after === 0) {
+      console.log(`[buffer] ${phone} lista vazia ao acordar — nada a flushar`);
+      return;
+    }
+
+    // Lock local contra duplicata (2 execuções chegando com same snapshot)
+    if (flushing.has(phone)) {
+      console.log(`[buffer] ${phone} outra execução já está flushando — abortando`);
+      return;
+    }
+    flushing.add(phone);
+
+    try {
+      // Pega tudo e limpa — atômico o suficiente pro nosso caso
+      const [raw, convId] = await Promise.all([
+        Redis.lrange(msgsKey(phone)),
+        Redis.get(convKey(phone))
+      ]);
+      await Redis.del(msgsKey(phone), convKey(phone));
+
+      const messages = raw
+        .map(s => { try { return JSON.parse(s) as BufferedMessage; } catch { return null; } })
+        .filter((m): m is BufferedMessage => !!m);
+
+      if (messages.length === 0 || !convId) {
+        console.log(`[buffer] FLUSH ${phone} abortado (msgs=${messages.length}, conv=${!!convId})`);
+        return;
+      }
+
+      console.log(`[buffer] FLUSH ${phone} — ${messages.length} msg(s). Chamando Serena…`);
+      await onFlush(convId, phone, messages);
+    } finally {
+      flushing.delete(phone);
+      console.log(`[buffer] ${phone} liberado`);
+    }
+  } catch (err: any) {
+    console.error(`[buffer] Erro ao buferar msg de ${phone}:`, err.message);
+  }
 }
 
-// Cancela qualquer buffer pendente para o telefone, descartando as mensagens
-// acumuladas. Usado quando um humano assume a conversa.
-export function cancelBuffer(phone: string): void {
-  const entry = buffer.get(phone);
-  if (!entry) return;
-  clearTimeout(entry.timer);
-  buffer.delete(phone);
-  console.log(`[buffer] CANCELADO buffer de ${phone} (${entry.messages.length} msg descartada(s))`);
+// Cancela o buffer: apaga as chaves no Redis. Execuções em espera vão
+// acordar, comparar snapshot (before > 0, after = 0), diferença detectada
+// → não flusham.
+export async function cancelBuffer(phone: string): Promise<void> {
+  try {
+    if (redisConfigured) {
+      await Redis.del(msgsKey(phone), convKey(phone));
+    }
+    console.log(`[buffer] CANCELADO buffer de ${phone}`);
+  } catch (err: any) {
+    console.error(`[buffer] Erro ao cancelar ${phone}:`, err.message);
+  }
 }
 
-// Snapshot do estado atual — útil para endpoint de diagnóstico.
-export function bufferSnapshot() {
-  const now = Date.now();
-  return {
-    pending: Array.from(buffer.entries()).map(([phone, e]) => ({
-      phone,
-      messages: e.messages.length,
-      waitingForSec: Math.round((now - e.firstAt) / 1000)
-    })),
-    processing: Array.from(processing)
-  };
+// Snapshot do estado atual — diagnóstico via GET /debug/buffer.
+export async function bufferSnapshot() {
+  if (!redisConfigured) {
+    return { redis: false, pending: [], flushing: Array.from(flushing) };
+  }
+
+  try {
+    const keys = await Redis.keys('rs:buf:*');
+    const pending = await Promise.all(
+      keys.filter(k => !k.startsWith('rs:conv:')).map(async k => ({
+        phone: k.replace('rs:buf:', ''),
+        messages: await Redis.llen(k)
+      }))
+    );
+    return { redis: true, pending, flushing: Array.from(flushing) };
+  } catch (err: any) {
+    return { redis: true, error: err.message, flushing: Array.from(flushing) };
+  }
 }

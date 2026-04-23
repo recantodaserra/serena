@@ -134,13 +134,14 @@ export async function handleWebhook(req: Request, res: Response) {
       return;
     }
 
-    // Enfileira no buffer — aguarda 30s de silêncio antes de chamar a Serena
+    // Enfileira no buffer — aguarda 30s de silêncio antes de chamar a Serena.
+    // Fire-and-forget: o webhook já respondeu 200, não espera o debounce.
     bufferMessage(
       phone,
       conv.id,
       { content, type, mediaBase64, mediaUrl },
       processBufferedMessages
-    );
+    ).catch(err => console.error(`[webhook] Erro no bufferMessage de ${phone}:`, err.message));
 
   } catch (err: any) {
     console.error(`[webhook] Erro ao receber mensagem de ${phone}:`, err.message);
@@ -171,7 +172,7 @@ async function handleHumanTakeoverFromPhone(parsed: ParsedMessage): Promise<void
       await ConversationService.markTransferred(phone, 'resposta_humana_manual');
     }
 
-    cancelBuffer(phone);
+    await cancelBuffer(phone);
 
     console.log(`[webhook] Humano assumiu ${phone} via celular.`);
   } catch (err: any) {
@@ -244,7 +245,7 @@ async function processBufferedMessages(
   // não devem disparar uma nova resposta da IA — humano agora está no controle).
   if (result.transfer) {
     await ConversationService.markTransferred(phone, result.transfer.reason);
-    cancelBuffer(phone);
+    await cancelBuffer(phone);
     await notifyTransfer(phone, result.transfer.reason, messages);
   }
 

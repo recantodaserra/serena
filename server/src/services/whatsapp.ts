@@ -30,91 +30,15 @@ async function post(path: string, body: object) {
   return res.json();
 }
 
-// Parâmetros do splitter. São propositalmente conservadores — preferimos
-// quebrar demais a mandar textão.
-const HARD_MAX = 200;        // limite duro de 1 bloco
-const MERGE_TINY_MAX = 18;   // só mergeia se o anterior for BEM curto (ex: "Oi!", "Certo.")
-
-// Quebra AGRESSIVAMENTE o texto em blocos pequenos, SEM depender do modelo
-// ter colocado \n\n na resposta.
-//
-// Estratégia:
-//   1. Normaliza quebras de linha (\r\n → \n).
-//   2. Junta parágrafos e linhas num fluxo unificado.
-//   3. Divide por sentença (. ! ? ou \n) — cada sentença vira candidata a bloco.
-//   4. Se uma sentença ultrapassa HARD_MAX, corta por vírgula ou por palavras.
-//   5. Mergeia só blocos MUITO curtos (< MIN_MERGE), respeitando SOFT_MAX.
-//
-// Isso garante que mesmo se a Serena responder "Oi! Temos 5 chalés. Quer ver?"
-// numa linha só, vira 3 mensagens separadas.
+// Split idêntico ao padrão n8n: divide por qualquer sequência de \n
+// (simples ou múltiplas), trim, descarta vazios. Cada linha = 1 mensagem.
+// O prompt da Serena é responsável por colocar \n entre as frases.
 function splitIntoBlocks(text: string): string[] {
-  const clean = text.replace(/\r\n/g, '\n').trim();
-  if (!clean) return [];
-
-  // Fase 1: quebra em sentenças. Usamos um lookahead para preservar a
-  // pontuação dentro da sentença e cortar DEPOIS do sinal.
-  // Também tratamos \n simples como fim de sentença (listas, bullets, etc).
-  const rawPieces = clean
-    .split(/(?<=[.!?…])\s+|\n+/)
+  if (!text) return [];
+  return text
+    .split(/\n+/)
     .map(p => p.trim())
-    .filter(Boolean);
-
-  // Fase 2: se alguma peça passa de HARD_MAX, quebra ela por vírgula; se
-  // ainda assim passar, quebra por palavras.
-  const pieces: string[] = [];
-  for (const p of rawPieces) {
-    if (p.length <= HARD_MAX) { pieces.push(p); continue; }
-    pieces.push(...splitByComma(p, HARD_MAX));
-  }
-
-  // Fase 3: mergeia SÓ quando o bloco anterior é muito curto (tipo "Oi!",
-  // "Claro.", "Certo."). Frases de tamanho médio ficam sempre separadas —
-  // é exatamente o que queremos pra simular conversa humana.
-  const merged: string[] = [];
-  for (const p of pieces) {
-    const last = merged[merged.length - 1];
-    const canMerge =
-      last != null &&
-      last.length <= MERGE_TINY_MAX &&
-      last.length + 1 + p.length <= HARD_MAX;
-
-    if (canMerge) merged[merged.length - 1] = last + ' ' + p;
-    else merged.push(p);
-  }
-
-  return merged;
-}
-
-function splitByComma(text: string, maxLen: number): string[] {
-  const parts = text.split(/,\s+/).map(p => p.trim()).filter(Boolean);
-  const out: string[] = [];
-  let cur = '';
-  for (const p of parts) {
-    const candidate = cur ? `${cur}, ${p}` : p;
-    if (candidate.length <= maxLen) {
-      cur = candidate;
-    } else {
-      if (cur) out.push(cur);
-      if (p.length > maxLen) out.push(...splitByWords(p, maxLen));
-      else cur = p;
-      if (cur === p && p.length > maxLen) cur = '';
-    }
-  }
-  if (cur) out.push(cur);
-  return out;
-}
-
-function splitByWords(text: string, maxLen: number): string[] {
-  const words = text.split(/\s+/);
-  const out: string[] = [];
-  let current = '';
-  for (const w of words) {
-    if (!current) { current = w; continue; }
-    if (current.length + 1 + w.length <= maxLen) current += ' ' + w;
-    else { out.push(current); current = w; }
-  }
-  if (current) out.push(current);
-  return out;
+    .filter(p => p.length > 0);
 }
 
 // Duração do typing proporcional ao tamanho do bloco.

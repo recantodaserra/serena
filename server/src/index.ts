@@ -88,7 +88,7 @@ app.post('/api/conversations/:id/send', async (req, res) => {
 
     // Descarta qualquer buffer de mensagens do cliente que estaria
     // prestes a disparar a Serena. Humano está no controle agora.
-    cancelBuffer(conv.phone);
+    await cancelBuffer(conv.phone);
 
     res.json(msg);
   } catch (err: any) {
@@ -140,11 +140,14 @@ app.get('/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString()
 
 // Diagnóstico: estado do buffer de mensagens. Útil para verificar em produção
 // se o agente está realmente acumulando mensagens picadas por 30s.
-app.get('/debug/buffer', (_, res) => res.json(bufferSnapshot()));
+app.get('/debug/buffer', async (_, res) => {
+  try { res.json(await bufferSnapshot()); }
+  catch (err: any) { res.status(500).json({ error: err.message }); }
+});
 
 app.listen(PORT, () => {
   console.log(`✅ Servidor Recanto da Serra rodando na porta ${PORT}`);
-  console.log(`   Build: buffer30s+blocos160ch+delay-nativo (${new Date().toISOString()})`);
+  console.log(`   Build: buffer-redis-debounce + split-por-\\n + delay-nativo (${new Date().toISOString()})`);
   console.log(`   Webhook: POST http://localhost:${PORT}/webhook/whatsapp`);
   console.log(`   API: GET http://localhost:${PORT}/api/conversations`);
 });
