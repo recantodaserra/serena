@@ -77,20 +77,39 @@ async function toolVerificarDisponibilidade(input: Record<string, unknown>): Pro
   if (nights < 1) return { type: 'text', text: 'O mínimo é 1 diária.' };
 
   const chalets = await ReservationDB.getChalets();
-  const results: string[] = [];
+  const lines: string[] = [];
 
   for (const chalet of chalets) {
     const available = await ReservationDB.checkAvailability(chalet.id, entrada, saida);
-    if (available) results.push(chalet.name);
+    if (!available) continue;
+
+    // Calcula preço junto para evitar segunda chamada à API
+    const customPrices = await ReservationDB.getCustomPrices(chalet.id, entrada, saida);
+    const priceMap = Object.fromEntries(customPrices.map(p => [p.date, Number(p.price)]));
+    let total = 0;
+    let curr = entrada;
+    while (curr < saida) {
+      let price = priceMap[curr];
+      if (!price) {
+        const dow = dayOfWeek(curr);
+        price = (dow === 5 || dow === 6 || dow === 0)
+          ? Number(chalet.base_price)
+          : (chalet.weekday_price != null ? Number(chalet.weekday_price) : Number(chalet.base_price) * 0.85);
+      }
+      total += price;
+      curr = addDays(curr, 1);
+    }
+
+    lines.push(`✅ ${chalet.name}: ${toCurrency(total)} total (entrada PIX: ${toCurrency(total * 0.5)})`);
   }
 
-  if (results.length === 0) {
-    return { type: 'text', text: `Infelizmente todos os chalés estão ocupados de ${input.dataDeEntrada} a ${input.dataDeSaida}. Deseja verificar outras datas?` };
+  if (lines.length === 0) {
+    return { type: 'text', text: `Todos os chalés estão ocupados de ${input.dataDeEntrada} a ${input.dataDeSaida}. Deseja verificar outras datas?` };
   }
 
   return {
     type: 'text',
-    text: `Chalés disponíveis de ${input.dataDeEntrada} a ${input.dataDeSaida} (${nights} diária${nights > 1 ? 's' : ''}):\n${results.map(n => `✅ ${n}`).join('\n')}`
+    text: `Disponível de ${input.dataDeEntrada} a ${input.dataDeSaida} (${nights} diária${nights > 1 ? 's' : ''}):\n${lines.join('\n')}`
   };
 }
 
@@ -174,7 +193,7 @@ async function toolProcessarReserva(input: Record<string, unknown>, phone: strin
 export const TOOL_DEFINITIONS = [
   {
     name: 'verificar_disponibilidade',
-    description: 'Verifica quais chalés estão disponíveis para um período. Chame SEMPRE que o cliente perguntar sobre disponibilidade, mesmo que já tenha perguntado antes.',
+    description: 'Verifica quais chalés estão disponíveis para um período e já retorna o preço total de cada um. Use esta ferramenta quando o cliente perguntar sobre disponibilidade OU sobre preço/valor para um período.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -186,7 +205,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'calcular_orcamento',
-    description: 'Calcula o valor total da hospedagem para um ou mais chalés. Só chame após confirmar disponibilidade.',
+    description: 'Calcula orçamento detalhado para um chalé específico. Use SOMENTE quando o cliente pedir detalhes de um chalé que já foi confirmado como disponível por verificar_disponibilidade.',
     input_schema: {
       type: 'object' as const,
       properties: {

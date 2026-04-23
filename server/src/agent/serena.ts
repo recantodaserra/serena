@@ -17,7 +17,7 @@ export async function runSerena(
   userMessage: string,
   imageBase64?: string
 ): Promise<SerenaResponse> {
-  const history = await MemoryService.get(conversationId, 10);
+  const history = await MemoryService.get(conversationId, 8);
 
   // Monta o conteúdo da mensagem do usuário (texto + imagem opcional)
   type ContentPart =
