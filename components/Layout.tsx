@@ -1,7 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
-import { Menu, Instagram, Facebook, MapPin, X, Lock } from 'lucide-react';
+import { Menu, Instagram, Facebook, MapPin, X, Lock, LogOut } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -12,7 +13,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const isHome = location.pathname === '/';
-  const isAdmin = location.pathname === '/admin';
+  const isAdmin = location.pathname === '/admin' || location.pathname === '/login';
+  const { user, signOut } = useAuth();
 
   // HOOKS MUST BE CALLED UNCONDITIONALLY
   // Handle scroll effect for header
@@ -173,9 +175,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <p>&copy; {new Date().getFullYear()} Recanto da Serra.</p>
             <div className="flex gap-6 items-center">
               <a href="#" className="hover:text-white transition-colors">Políticas</a>
-              <Link to="/admin" className="hover:text-white transition-colors flex items-center gap-1">
-                <Lock size={10} /> Área Administrativa
-              </Link>
+              {user ? (
+                <button
+                  onClick={() => signOut()}
+                  className="hover:text-white transition-colors flex items-center gap-1"
+                >
+                  <LogOut size={10} /> Sair
+                </button>
+              ) : (
+                <Link to="/login" className="hover:text-white transition-colors flex items-center gap-1">
+                  <Lock size={10} /> Área Administrativa
+                </Link>
+              )}
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, Link, useParams } from 'react-router-dom';
+import { HashRouter, Routes, Route, Link, Navigate, useParams } from 'react-router-dom';
 import DatePicker, { registerLocale } from 'react-datepicker';
 import { ptBR } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -12,6 +12,8 @@ import Admin from './components/Admin';
 import Gallery from './components/Gallery';
 import Location from './components/Location';
 import ChatPage from './components/Chat';
+import Login from './components/Login';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WHATSAPP_NUMBER } from './constants';
 import { ReservationService, ChaletService, SiteService, PricingService, Reservation, CustomPrice } from './services/storage';
 import { Chalet } from './types';
@@ -422,21 +424,31 @@ const Home: React.FC<HomeProps> = ({ dateRange, setDateRange, guests, setGuests 
   );
 };
 
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+};
+
 const App: React.FC = () => {
   const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([null, null]);
   const [guests, setGuests] = useState(2);
 
   return (
     <HashRouter>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Home dateRange={dateRange} setDateRange={setDateRange} guests={guests} setGuests={setGuests} />} />
-          <Route path="/chale/:slug" element={<ChaletDetailsWrapper />} />
-          <Route path="/galeria" element={<Gallery />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/conversas" element={<ChatPage />} />
-        </Routes>
-      </Layout>
+      <AuthProvider>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Home dateRange={dateRange} setDateRange={setDateRange} guests={guests} setGuests={setGuests} />} />
+            <Route path="/chale/:slug" element={<ChaletDetailsWrapper />} />
+            <Route path="/galeria" element={<Gallery />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/conversas" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
+          </Routes>
+        </Layout>
+      </AuthProvider>
     </HashRouter>
   );
 };
