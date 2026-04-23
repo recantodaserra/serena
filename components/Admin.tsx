@@ -1125,6 +1125,7 @@ const CalendarManager = () => {
   const [selectedChaletId, setSelectedChaletId] = useState('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [newPrice, setNewPrice] = useState('');
+  const [selectedRes, setSelectedRes] = useState<Reservation | null>(null);
 
   const loadData = async () => {
      const [c, r, p] = await Promise.all([ChaletService.getAll(), ReservationService.getAll(), PricingService.getAll()]);
@@ -1190,9 +1191,9 @@ const CalendarManager = () => {
                  const isSelected = selectedDate === dateStr;
 
                  return (
-                     <div 
-                        key={dateStr} 
-                        onClick={() => setSelectedDate(dateStr)}
+                     <div
+                        key={dateStr}
+                        onClick={() => res ? setSelectedRes(res) : setSelectedDate(dateStr)}
                         className={`min-h-[80px] border rounded-lg p-2 cursor-pointer transition-all relative ${isSelected ? 'ring-2 ring-serra-accent border-transparent' : 'border-gray-100 hover:border-serra-accent'} ${res ? (res.type === 'maintenance' ? 'bg-gray-100' : 'bg-red-50') : 'bg-white'}`}
                      >
                         <span className="text-xs font-bold text-gray-700">{format(day, 'd')}</span>
@@ -1216,16 +1217,27 @@ const CalendarManager = () => {
        {selectedDate && (
            <div className="fixed bottom-0 left-0 right-0 bg-white p-4 shadow-2xl border-t border-gray-200 flex items-center justify-center gap-4 z-50 animate-slide-up">
                <span className="font-bold text-gray-700">Editar dia {format(parseISO(selectedDate), 'dd/MM/yyyy')}</span>
-               <input 
-                 type="number" 
-                 placeholder="Novo Preço" 
-                 value={newPrice} 
+               <input
+                 type="number"
+                 placeholder="Novo Preço"
+                 value={newPrice}
                  onChange={(e) => setNewPrice(e.target.value)}
                  className="p-2 border rounded w-32"
                />
                <button onClick={handleSetPrice} className="bg-serra-accent text-white px-4 py-2 rounded font-bold hover:bg-serra-dark">Salvar Preço</button>
                <button onClick={() => setSelectedDate(null)} className="text-gray-500 hover:text-gray-700">Cancelar</button>
            </div>
+       )}
+
+       {selectedRes && (
+         <ReservationDetailModal
+           reservation={selectedRes}
+           chalets={chalets}
+           onClose={() => setSelectedRes(null)}
+           onDelete={async (id) => { await ReservationService.delete(id); setSelectedRes(null); loadData(); }}
+           onEdit={() => { setSelectedRes(null); loadData(); }}
+           onSettle={async (res) => { await ReservationService.update({ ...res, amountPaid: Number(res.totalValue), paymentType: 'Integral' }); setSelectedRes(null); loadData(); }}
+         />
        )}
     </div>
   );
