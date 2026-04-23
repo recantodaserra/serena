@@ -90,6 +90,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, onBack, onUpdate 
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessageCountRef = useRef(0);
+  const isInitialLoadRef = useRef(true);
 
   const loadMessages = useCallback(async () => {
     try {
@@ -102,6 +105,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, onBack, onUpdate 
 
   useEffect(() => {
     setLoading(true);
+    isInitialLoadRef.current = true;
+    prevMessageCountRef.current = 0;
     loadMessages();
     ChatAPI.markRead(conversation.id);
     const interval = setInterval(loadMessages, 5000);
@@ -109,7 +114,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, onBack, onUpdate 
   }, [conversation.id, loadMessages]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (!container || messages.length === 0) return;
+
+    const prevCount = prevMessageCountRef.current;
+    const currentCount = messages.length;
+    prevMessageCountRef.current = currentCount;
+
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+      return;
+    }
+
+    if (currentCount > prevCount) {
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (distanceFromBottom < 120) {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
   }, [messages]);
 
   const send = async () => {
@@ -167,7 +190,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, onBack, onUpdate 
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#f0f2f5]">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#f0f2f5]">
         {loading && <div className="text-center text-gray-400 text-sm py-8">Carregando...</div>}
         {!loading && messages.length === 0 && (
           <div className="text-center text-gray-400 text-sm py-8">Nenhuma mensagem ainda</div>
