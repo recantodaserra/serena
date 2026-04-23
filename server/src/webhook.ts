@@ -3,7 +3,7 @@ import { ConversationService, MessageService } from './services/supabase.js';
 import { WhatsApp } from './services/whatsapp.js';
 import { transcribeAudio, describeImage } from './services/media.js';
 import { runSerena } from './agent/serena.js';
-import { bufferMessage, BufferedMessage } from './services/messageBuffer.js';
+import { bufferMessage, cancelBuffer, BufferedMessage } from './services/messageBuffer.js';
 
 interface ParsedMessage {
   phone: string;
@@ -167,9 +167,12 @@ async function processBufferedMessages(
 
   await ConversationService.updateLastMessage(phone, result.text);
 
-  // Transferência para humano: notifica equipe ANTES de enviar mensagem ao cliente
+  // Transferência para humano: notifica equipe ANTES de enviar mensagem ao cliente.
+  // Cancela buffer pendente (mensagens que o cliente enviou durante o runSerena
+  // não devem disparar uma nova resposta da IA — humano agora está no controle).
   if (result.transfer) {
     await ConversationService.markTransferred(phone, result.transfer.reason);
+    cancelBuffer(phone);
     await notifyTransfer(phone, result.transfer.reason, messages);
   }
 

@@ -5,6 +5,7 @@ import { handleWebhook } from './webhook.js';
 import { supabase } from './services/supabase.js';
 import { WhatsApp } from './services/whatsapp.js';
 import { getAgentConfig, saveAgentConfig, invalidateConfigCache } from './services/agent_config.js';
+import { cancelBuffer } from './services/messageBuffer.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -39,14 +40,16 @@ app.get('/api/conversations/:id/messages', async (req, res) => {
   res.json(data);
 });
 
-// Humano envia mensagem manual
+// Humano envia mensagem manual.
+// Assume a conversa: marca como 'transferred' e cancela qualquer buffer
+// pendente, garantindo que a Serena NÃO vai responder em paralelo.
 app.post('/api/conversations/:id/send', async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'text required' });
 
   const { data: conv } = await supabase
     .from('conversations')
-    .select('phone')
+    .select('phone, status')
     .eq('id', req.params.id)
     .single();
 
@@ -67,10 +70,25 @@ app.post('/api/conversations/:id/send', async (req, res) => {
       .select()
       .single();
 
+    // Atualização da conversa: se ainda não estava transferida, transfere agora.
+    // Humano mandando mensagem = humano assumiu o atendimento.
+    const updates: Record<string, any> = {
+      last_message_at: new Date().toISOString(),
+      last_message_text: text.slice(0, 120)
+    };
+    if (conv.status !== 'transferred') {
+      updates.status = 'transferred';
+      updates.transferred_at = new Date().toISOString();
+      updates.transfer_reason = 'resposta_humana_manual';
+    }
     await supabase
       .from('conversations')
-      .update({ last_message_at: new Date().toISOString(), last_message_text: text.slice(0, 120) })
+      .update(updates)
       .eq('id', req.params.id);
+
+    // Descarta qualquer buffer de mensagens do cliente que estaria
+    // prestes a disparar a Serena. Humano está no controle agora.
+    cancelBuffer(conv.phone);
 
     res.json(msg);
   } catch (err: any) {

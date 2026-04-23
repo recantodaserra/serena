@@ -61,3 +61,13 @@ function flush(phone: string, onFlush: FlushCallback): void {
     .catch(err => console.error(`[buffer] Erro ao processar mensagens de ${phone}:`, err.message))
     .finally(() => processing.delete(phone));
 }
+
+// Cancela qualquer buffer pendente para o telefone, descartando as mensagens
+// acumuladas. Usado quando um humano assume a conversa — a IA não deve
+// processar o que o cliente mandou enquanto a decisão humana estava em curso.
+export function cancelBuffer(phone: string): void {
+  const entry = buffer.get(phone);
+  if (!entry) return;
+  clearTimeout(entry.timer);
+  buffer.delete(phone);
+}
