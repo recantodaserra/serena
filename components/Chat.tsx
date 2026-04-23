@@ -229,14 +229,16 @@ const ChatPage: React.FC<ChatPageProps> = ({ embedded = false }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(false);
+  const selectedIdRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const data = await ChatAPI.getConversations();
       setConversations(data);
       setError(null);
-      if (selected) {
-        const updated = data.find(c => c.id === selected.id);
+      const currentId = selectedIdRef.current;
+      if (currentId) {
+        const updated = data.find(c => c.id === currentId);
         if (updated) setSelected(updated);
       }
     } catch (err: any) {
@@ -244,7 +246,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ embedded = false }) => {
     } finally {
       setLoading(false);
     }
-  }, [selected]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -253,6 +255,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ embedded = false }) => {
   }, [load]);
 
   const handleSelect = (conv: Conversation) => {
+    selectedIdRef.current = conv.id;
     setSelected(conv);
     setShowChat(true);
   };
