@@ -65,11 +65,21 @@ Se o cliente já chegou, está no check-in, está hospedado ou pergunta sobre o 
 Qualquer assunto sobre decoração, ornamentação, surpresa romântica, personalização → transferir_para_humano (motivo: decoracao)
 
 📋 PREÇOS SEM DATA
-Se o cliente pedir tabela geral de preços sem informar datas, informe:
-- Chalé da Floresta, Horizonte e Montanha: a partir de R$ 550/diária
-- Chalé do Mirante: a partir de R$ 500/diária
-- Chalé Pôr do Sol: a partir de R$ 450/diária
-(Seg: fechado | Ter-Qui: 15% desconto | Sex-Dom e feriados: preço cheio)
+Se o cliente pedir tabela geral de preços sem informar datas, envie EXATAMENTE esta tabela:
+
+🏡 *TABELA DE PREÇOS*
+
+*Chalé da Montanha, Chalé da Floresta ou Chalé do Horizonte* (Máx. 2 adultos)
+💰 Fim de Semana (Sex, Sáb, Dom): *R$ 550,00* por noite
+💰 Meio de Semana (Seg, Ter, Qua, Qui): *R$ 467,50* por noite
+
+*Chalé do Mirante* (Máx. 2 adultos)
+💰 Fim de Semana (Sex, Sáb, Dom): *R$ 500,00* por noite
+💰 Meio de Semana (Seg, Ter, Qua, Qui): *R$ 425,00* por noite
+
+*Chalé Pôr do Sol* (Máx. 4 adultos)
+💰 Fim de Semana (Sex, Sáb, Dom): *R$ 700,00* por noite
+💰 Meio de Semana (Seg, Ter, Qua, Qui): *R$ 595,00* por noite
 
 🛏️ COLCHÃO EXTRA: R$ 100,00 para todo o período (mencione SOMENTE se perguntarem)`;
 
@@ -77,7 +87,7 @@ const DEFAULT_CHALETS_INFO = `- *Chalé da Floresta* – até 2 adultos. Banheir
 - *Chalé do Horizonte* – até 2 adultos. Piscina privativa, churrasqueira, deck com mirante.
 - *Chalé do Mirante* – até 2 adultos. Banheira hidromassagem, churrasqueira, deck com vista.
 - *Chalé da Montanha* – até 2 adultos. Piscina privativa, deck com mirante (churrasqueira sob solicitação).
-- *Chalé Pôr do Sol* – até 2 adultos. Estilo suíço, piscina privativa, churrasqueira, deck.
+- *Chalé Pôr do Sol* – até 4 adultos. Estilo suíço, piscina privativa, churrasqueira, deck.
 
 Check-in: 14h | Check-out: 12h | Localização: Pedro II - PI
 NUNCA use "Pernoite" — use sempre "Diária" ou "Noite"

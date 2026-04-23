@@ -8,7 +8,8 @@ export interface Chalet {
   amenities: string[];
   coverImage: string;
   images: string[];
-  basePrice: number;
+  basePrice: number;    // preço fim de semana (Sex, Sáb, Dom)
+  weekdayPrice: number; // preço meio de semana (Seg, Ter, Qua, Qui)
 }
 
 export interface ReservationData {

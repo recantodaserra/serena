@@ -1126,13 +1126,21 @@ const CalendarManager = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [newPrice, setNewPrice] = useState('');
   const [selectedRes, setSelectedRes] = useState<Reservation | null>(null);
+  const [editWeekend, setEditWeekend] = useState('');
+  const [editWeekday, setEditWeekday] = useState('');
+  const [savingPrices, setSavingPrices] = useState(false);
+  const [savedPrices, setSavedPrices] = useState(false);
 
   const loadData = async () => {
      const [c, r, p] = await Promise.all([ChaletService.getAll(), ReservationService.getAll(), PricingService.getAll()]);
      setChalets(c);
      setReservations(r);
      setPrices(p);
-     if(c.length > 0 && !selectedChaletId) setSelectedChaletId(c[0].id);
+     if(c.length > 0 && !selectedChaletId) {
+       setSelectedChaletId(c[0].id);
+       setEditWeekend(String(c[0].basePrice));
+       setEditWeekday(String(c[0].weekdayPrice));
+     }
   };
 
   useEffect(() => { loadData(); }, []);
@@ -1152,6 +1160,26 @@ const CalendarManager = () => {
       loadData();
   };
 
+  const handleChaletChange = (chaletId: string) => {
+    setSelectedChaletId(chaletId);
+    const chalet = chalets.find(c => c.id === chaletId);
+    if (chalet) {
+      setEditWeekend(String(chalet.basePrice));
+      setEditWeekday(String(chalet.weekdayPrice));
+    }
+    setSavedPrices(false);
+  };
+
+  const handleSaveDefaultPrices = async () => {
+    if (!selectedChaletId || !editWeekend || !editWeekday) return;
+    setSavingPrices(true);
+    await ChaletService.updatePrices(selectedChaletId, Number(editWeekend), Number(editWeekday));
+    setSavingPrices(false);
+    setSavedPrices(true);
+    setTimeout(() => setSavedPrices(false), 3000);
+    loadData();
+  };
+
   return (
     <div className="space-y-6">
        <div className="flex justify-between items-center">
@@ -1165,7 +1193,7 @@ const CalendarManager = () => {
 
        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
           <label className="text-xs font-bold text-gray-500 uppercase">Visualizar Chalé</label>
-          <select value={selectedChaletId} onChange={(e) => setSelectedChaletId(e.target.value)} className="w-full mt-1 p-2 bg-gray-50 border border-gray-200 rounded outline-none">
+          <select value={selectedChaletId} onChange={(e) => handleChaletChange(e.target.value)} className="w-full mt-1 p-2 bg-gray-50 border border-gray-200 rounded outline-none">
               {chalets.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
        </div>
@@ -1185,8 +1213,11 @@ const CalendarManager = () => {
                      isWithinInterval(day, { start: parseISO(r.startDate), end: addDays(parseISO(r.endDate), -1) })
                  );
                  const customPrice = prices.find(p => p.chaletId === selectedChaletId && p.date === dateStr);
-                 const basePrice = chalets.find(c => c.id === selectedChaletId)?.basePrice || 0;
-                 const finalPrice = customPrice ? customPrice.price : (getDay(day) === 1 ? 0 : (getDay(day) >= 2 && getDay(day) <= 4 ? basePrice * 0.85 : basePrice));
+                 const chalet = chalets.find(c => c.id === selectedChaletId);
+                 const dow = getDay(day);
+                 const isWeekend = dow === 0 || dow === 5 || dow === 6;
+                 const defaultPrice = isWeekend ? (chalet?.basePrice || 0) : (chalet?.weekdayPrice || 0);
+                 const finalPrice = customPrice ? customPrice.price : defaultPrice;
                  
                  const isSelected = selectedDate === dateStr;
 
@@ -1211,6 +1242,58 @@ const CalendarManager = () => {
                      </div>
                  );
              })}
+          </div>
+       </div>
+
+       {/* Seção de preços padrão por dia da semana */}
+       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <DollarSign size={18} className="text-serra-accent" />
+            <h3 className="font-bold text-gray-800">Preços Padrão por Dia da Semana</h3>
+          </div>
+          <p className="text-xs text-gray-500 mb-4">Esses preços são aplicados automaticamente quando não há preço personalizado para a data.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Fim de Semana (Sex, Sáb, Dom)</label>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500 text-sm">R$</span>
+                <input
+                  type="number"
+                  value={editWeekend}
+                  onChange={(e) => { setEditWeekend(e.target.value); setSavedPrices(false); }}
+                  className="flex-1 p-2 border border-gray-300 rounded outline-none focus:border-serra-accent text-lg font-bold"
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Meio de Semana (Seg, Ter, Qua, Qui)</label>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500 text-sm">R$</span>
+                <input
+                  type="number"
+                  value={editWeekday}
+                  onChange={(e) => { setEditWeekday(e.target.value); setSavedPrices(false); }}
+                  className="flex-1 p-2 border border-gray-300 rounded outline-none focus:border-serra-accent text-lg font-bold"
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3 mt-4">
+            {savedPrices && (
+              <span className="text-green-600 text-sm font-medium flex items-center gap-1">
+                <CheckCircle2 size={16} /> Preços salvos com sucesso!
+              </span>
+            )}
+            <button
+              onClick={handleSaveDefaultPrices}
+              disabled={savingPrices}
+              className="flex items-center gap-2 bg-serra-accent text-white px-5 py-2 rounded-lg font-bold hover:bg-serra-dark disabled:opacity-50 transition-colors"
+            >
+              <Save size={16} />
+              {savingPrices ? 'Salvando...' : 'Salvar Preços Padrão'}
+            </button>
           </div>
        </div>
 

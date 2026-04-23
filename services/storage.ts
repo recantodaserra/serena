@@ -53,6 +53,7 @@ const mapChaletFromDB = (c: any): Chalet => ({
   capacity: c.capacity,
   amenities: c.amenities || [],
   basePrice: Number(c.base_price),
+  weekdayPrice: c.weekday_price != null ? Number(c.weekday_price) : Number(c.base_price) * 0.85,
   coverImage: c.cover_image,
   images: c.images || []
 });
@@ -65,6 +66,7 @@ const mapChaletToDB = (c: Partial<Chalet>) => ({
   capacity: c.capacity,
   amenities: c.amenities,
   base_price: c.basePrice,
+  weekday_price: c.weekdayPrice,
   cover_image: c.coverImage,
   images: c.images
 });
@@ -177,6 +179,15 @@ export const ChaletService = {
       const { error } = await supabase.from('chalets').insert(dbChalets);
       if (error) console.error("Erro ao sincronizar chalés:", error);
     }
+  },
+
+  updatePrices: async (chaletId: string, weekendPrice: number, weekdayPrice: number) => {
+    if (!supabase) return;
+    const { error } = await supabase
+      .from('chalets')
+      .update({ base_price: weekendPrice, weekday_price: weekdayPrice })
+      .eq('id', chaletId);
+    if (error) console.error("Erro ao atualizar preços do chalé:", error);
   }
 };
 
@@ -238,9 +249,10 @@ export const PricingService = {
     if (!chalet) return 0;
     const date = parseLocalDay(dateStr);
     const dayOfWeek = date.getDay();
-    if (dayOfWeek === 1) return 0; 
-    if (dayOfWeek >= 2 && dayOfWeek <= 4) return chalet.basePrice * 0.85; 
-    return chalet.basePrice;
+    // Fim de semana: Sex (5), Sáb (6), Dom (0)
+    if (dayOfWeek === 5 || dayOfWeek === 6 || dayOfWeek === 0) return chalet.basePrice;
+    // Meio de semana: Seg (1), Ter (2), Qua (3), Qui (4)
+    return chalet.weekdayPrice;
   }
 };
 

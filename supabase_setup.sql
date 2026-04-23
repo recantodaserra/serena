@@ -21,11 +21,16 @@ CREATE TABLE "public"."chalets" (
     "description" text,
     "capacity" text,
     "amenities" text[] DEFAULT '{}'::text[],
-    "base_price" numeric NOT NULL DEFAULT 0,
+    "base_price" numeric NOT NULL DEFAULT 0,       -- preço fim de semana (Sex, Sáb, Dom)
+    "weekday_price" numeric,                       -- preço meio de semana (Seg, Ter, Qua, Qui)
     "cover_image" text,
     "images" text[] DEFAULT '{}'::text[],
     PRIMARY KEY ("id")
 );
+
+-- Migração: adicionar weekday_price se a tabela já existir
+-- (execute apenas se estiver atualizando uma instalação existente)
+-- ALTER TABLE "public"."chalets" ADD COLUMN IF NOT EXISTS "weekday_price" numeric;
 
 -- Tabela: reservations
 CREATE TABLE "public"."reservations" (
