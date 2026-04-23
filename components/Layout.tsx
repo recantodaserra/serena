@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { Menu, Instagram, Facebook, MapPin, X, Lock, LogOut } from 'lucide-react';
+import { Menu, Instagram, MapPin, X, Lock, LogOut } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -161,11 +161,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <div>
               <h4 className="font-bold mb-6 uppercase tracking-widest text-xs text-serra-accent">Social</h4>
               <div className="flex space-x-4">
-                <a href="#" className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-serra-accent transition-all">
+                <a href="https://www.instagram.com/recantodaserraecopark" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-serra-accent transition-all">
                   <Instagram size={20} />
-                </a>
-                <a href="#" className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-serra-accent transition-all">
-                  <Facebook size={20} />
                 </a>
               </div>
             </div>
