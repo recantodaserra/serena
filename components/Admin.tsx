@@ -601,6 +601,7 @@ const ReservationManager = () => {
 
   const [filterStartDate, setFilterStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [filterEndDate, setFilterEndDate] = useState(format(addMonths(new Date(), 1), 'yyyy-MM-dd'));
+  const [filterChaletId, setFilterChaletId] = useState('');
 
   const initialFormState = {
     chaletId: '',
@@ -759,7 +760,9 @@ const ReservationManager = () => {
   };
 
   const filteredReservations = reservations.filter(r => {
-    return r.startDate >= filterStartDate && r.startDate <= filterEndDate;
+    if (r.startDate < filterStartDate || r.startDate > filterEndDate) return false;
+    if (filterChaletId && r.chaletId !== filterChaletId) return false;
+    return true;
   });
 
   const remainingBalance = Number(formData.totalValue) - Number(formData.amountPaid);
@@ -1014,23 +1017,33 @@ const ReservationManager = () => {
             </div>
          </div>
 
-         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex items-center gap-4">
+         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-wrap items-center gap-4">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Filtro:</span>
             <div className="flex items-center gap-2">
-               <input 
-                 type="date" 
+               <input
+                 type="date"
                  value={filterStartDate}
                  onChange={(e) => setFilterStartDate(e.target.value)}
                  className="bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm outline-none text-gray-600 focus:border-serra-accent"
                />
                <span className="text-gray-400">-</span>
-               <input 
-                 type="date" 
+               <input
+                 type="date"
                  value={filterEndDate}
                  onChange={(e) => setFilterEndDate(e.target.value)}
                  className="bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm outline-none text-gray-600 focus:border-serra-accent"
                />
             </div>
+            <select
+              value={filterChaletId}
+              onChange={(e) => setFilterChaletId(e.target.value)}
+              className="bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm outline-none text-gray-600 focus:border-serra-accent"
+            >
+              <option value="">Todos os chalés</option>
+              {chalets.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
          </div>
 
          <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative">
