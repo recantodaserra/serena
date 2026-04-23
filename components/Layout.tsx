@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Menu, Instagram, MapPin, X, Lock, LogOut } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { WHATSAPP_NUMBER } from '../constants';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -95,8 +96,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {/* Desktop Nav */}
             <nav className="hidden md:flex space-x-8 items-center">
               {navItems.map((item) => renderNavLink(item, false))}
-              <a 
-                href="#contato"
+              <a
+                href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Olá! Gostaria de mais informações sobre o Recanto da Serra.')}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="bg-serra-accent hover:bg-serra-copper text-white px-6 py-2 rounded-sm text-xs font-bold uppercase tracking-widest transition-all duration-300 shadow-md"
               >
                 Contato
