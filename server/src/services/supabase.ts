@@ -210,7 +210,7 @@ export const ReservationDB = {
         amount_paid: params.totalValue * 0.5,
         observations: params.observations || '',
         origin: 'WhatsApp',
-        created_at: Date.now()
+        created_at: new Date().toISOString()
       })
       .select()
       .single();
