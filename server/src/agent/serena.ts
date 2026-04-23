@@ -57,7 +57,7 @@ export async function runSerena(
   for (let step = 0; step < 8; step++) {
     steps = step + 1;
     const response = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+      model: 'gpt-4.1-mini',
       max_tokens: 1500,
       tools,
       tool_choice: 'auto',
@@ -108,8 +108,8 @@ export async function runSerena(
     break;
   }
 
-  // gpt-4.1: $2/1M input, $8/1M output
-  const costUsd = (totalPromptTokens / 1_000_000) * 2 + (totalCompletionTokens / 1_000_000) * 8;
+  // gpt-4.1-mini: $0.40/1M input, $1.60/1M output
+  const costUsd = (totalPromptTokens / 1_000_000) * 0.4 + (totalCompletionTokens / 1_000_000) * 1.6;
   const costBrl = costUsd * 5.7;
   console.log(
     `[serena] tokens phone=${phone} steps=${steps}` +

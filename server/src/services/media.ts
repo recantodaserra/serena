@@ -97,7 +97,7 @@ export async function describeImage(imageBase64: string, caption?: string): Prom
     : 'O cliente enviou uma imagem. Descreva o que vê de forma útil para o contexto de reservas de chalé (comprovante de pagamento, foto, documento, etc).';
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4.1',
+    model: 'gpt-4.1-mini',
     max_tokens: 400,
     messages: [
       {
