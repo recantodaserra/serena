@@ -1,16 +1,14 @@
-import OpenAI from 'openai';
-import { Readable } from 'stream';
+import OpenAI, { toFile } from 'openai';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function transcribeAudio(audioBase64: string): Promise<string> {
   const buffer = Buffer.from(audioBase64, 'base64');
-  const stream = Readable.from(buffer) as any;
-  stream.name = 'audio.ogg';
+  const file = await toFile(buffer, 'audio.ogg', { type: 'audio/ogg' });
 
   const transcription = await openai.audio.transcriptions.create({
     model: 'whisper-1',
-    file: stream,
+    file,
     language: 'pt'
   });
 
