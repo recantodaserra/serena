@@ -21,7 +21,7 @@ import { Chalet } from './types';
 import { formatCurrency, getAmenityIcon } from './utils/helpers';
 import { 
   Calendar as CalendarIcon, Users, Search, Ban, CalendarCheck, RotateCcw,
-  Sparkles, CreditCard, X as XIcon
+  Sparkles, CreditCard
 } from 'lucide-react';
 
 registerLocale('pt-BR', ptBR);
@@ -129,15 +129,12 @@ const BookingBar: React.FC<BookingBarProps> = ({ startDate, endDate, onChangeDat
                   filterDate={(date) => !isDateFullyBooked(date)}
                   renderDayContents={(day, date) => {
                     const fullyBooked = isDateFullyBooked(date ?? new Date());
+                    if (!fullyBooked) return <span>{day}</span>;
                     return (
-                      <div className="relative w-full h-full flex items-center justify-center">
-                        <span>{day}</span>
-                        {fullyBooked && (
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                             <XIcon size={32} className="text-red-500/50" strokeWidth={3} />
-                          </div>
-                        )}
-                      </div>
+                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', lineHeight: 1, gap: '2px' }}>
+                        <span style={{ textDecoration: 'line-through', textDecorationColor: 'rgba(220,38,38,0.45)', textDecorationThickness: '1.5px' }}>{day}</span>
+                        <span style={{ fontSize: '7px', fontWeight: 700, color: 'rgba(220,38,38,0.55)', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1 }}>Lotado</span>
+                      </span>
                     );
                   }}
                 />
