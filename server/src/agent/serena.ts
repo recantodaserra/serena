@@ -47,8 +47,15 @@ export async function runSerena(
     function: { name: t.name, description: t.description, parameters: t.input_schema }
   }));
 
+  // Acumula tokens de todas as chamadas do loop agentic
+  let totalPromptTokens = 0;
+  let totalCompletionTokens = 0;
+  let steps = 0;
+  const toolsUsed: string[] = [];
+
   // Agentic loop
   for (let step = 0; step < 8; step++) {
+    steps = step + 1;
     const response = await openai.chat.completions.create({
       model: 'gpt-4.1',
       max_tokens: 1500,
@@ -59,6 +66,9 @@ export async function runSerena(
         ...messages
       ]
     });
+
+    totalPromptTokens += response.usage?.prompt_tokens ?? 0;
+    totalCompletionTokens += response.usage?.completion_tokens ?? 0;
 
     const choice = response.choices[0];
 
@@ -71,6 +81,7 @@ export async function runSerena(
       messages.push(choice.message as any);
 
       for (const toolCall of choice.message.tool_calls) {
+        toolsUsed.push(toolCall.function.name);
         let input: Record<string, unknown> = {};
         try { input = JSON.parse(toolCall.function.arguments); } catch {}
 
@@ -96,6 +107,16 @@ export async function runSerena(
     finalText = choice.message.content || 'Estou com uma dificuldade técnica. Um momento!';
     break;
   }
+
+  // gpt-4.1: $2/1M input, $8/1M output
+  const costUsd = (totalPromptTokens / 1_000_000) * 2 + (totalCompletionTokens / 1_000_000) * 8;
+  const costBrl = costUsd * 5.7;
+  console.log(
+    `[serena] tokens phone=${phone} steps=${steps}` +
+    ` | in=${totalPromptTokens} out=${totalCompletionTokens} total=${totalPromptTokens + totalCompletionTokens}` +
+    ` | custo ~$${costUsd.toFixed(5)} / R$${costBrl.toFixed(4)}` +
+    (toolsUsed.length ? ` | tools=[${toolsUsed.join(',')}]` : '')
+  );
 
   if (!finalText) finalText = 'Estou com uma dificuldade técnica. Um momento!';
 
