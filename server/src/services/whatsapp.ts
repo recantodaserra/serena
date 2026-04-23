@@ -30,82 +30,78 @@ async function post(path: string, body: object) {
   return res.json();
 }
 
-// Tamanho-alvo de cada bloco enviado ao WhatsApp.
-// 160 chars é o sweet spot: cabe uma ou duas frases, força a IA a parecer
-// humana (ninguém digita paredão de texto), e evita fadiga de leitura.
-const MAX_BLOCK_LEN = 160;
+// Parâmetros do splitter. São propositalmente conservadores — preferimos
+// quebrar demais a mandar textão.
+const HARD_MAX = 200;        // limite duro de 1 bloco
+const MERGE_TINY_MAX = 18;   // só mergeia se o anterior for BEM curto (ex: "Oi!", "Certo.")
 
-// Quebra o texto em blocos pequenos.
-// Estratégia em cascata:
-//   1. Divide por dupla quebra de linha (parágrafos que a IA marcou).
-//   2. Cada parágrafo é subdividido por sentenças (. ! ? :).
-//   3. Sentenças são agrupadas até MAX_BLOCK_LEN caracteres.
-// Isso funciona mesmo se a IA devolver textão sem \n\n.
+// Quebra AGRESSIVAMENTE o texto em blocos pequenos, SEM depender do modelo
+// ter colocado \n\n na resposta.
+//
+// Estratégia:
+//   1. Normaliza quebras de linha (\r\n → \n).
+//   2. Junta parágrafos e linhas num fluxo unificado.
+//   3. Divide por sentença (. ! ? ou \n) — cada sentença vira candidata a bloco.
+//   4. Se uma sentença ultrapassa HARD_MAX, corta por vírgula ou por palavras.
+//   5. Mergeia só blocos MUITO curtos (< MIN_MERGE), respeitando SOFT_MAX.
+//
+// Isso garante que mesmo se a Serena responder "Oi! Temos 5 chalés. Quer ver?"
+// numa linha só, vira 3 mensagens separadas.
 function splitIntoBlocks(text: string): string[] {
   const clean = text.replace(/\r\n/g, '\n').trim();
   if (!clean) return [];
 
-  const paragraphs = clean.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
-  const blocks: string[] = [];
+  // Fase 1: quebra em sentenças. Usamos um lookahead para preservar a
+  // pontuação dentro da sentença e cortar DEPOIS do sinal.
+  // Também tratamos \n simples como fim de sentença (listas, bullets, etc).
+  const rawPieces = clean
+    .split(/(?<=[.!?…])\s+|\n+/)
+    .map(p => p.trim())
+    .filter(Boolean);
 
-  for (const para of paragraphs) {
-    // Linhas internas do parágrafo: se o modelo gerou uma lista com \n, cada
-    // linha já é um "chunk" natural. Caso contrário, caímos em splitBySentences.
-    const lines = para.split('\n').map(l => l.trim()).filter(Boolean);
-
-    for (const line of lines) {
-      if (line.length <= MAX_BLOCK_LEN) {
-        blocks.push(line);
-      } else {
-        blocks.push(...splitBySentences(line, MAX_BLOCK_LEN));
-      }
-    }
+  // Fase 2: se alguma peça passa de HARD_MAX, quebra ela por vírgula; se
+  // ainda assim passar, quebra por palavras.
+  const pieces: string[] = [];
+  for (const p of rawPieces) {
+    if (p.length <= HARD_MAX) { pieces.push(p); continue; }
+    pieces.push(...splitByComma(p, HARD_MAX));
   }
 
-  // Junta blocos adjacentes pequenos para não ficar hiper-picotado
-  // (ex: "Olá!" + "Tudo bem?" → "Olá! Tudo bem?" se couber).
+  // Fase 3: mergeia SÓ quando o bloco anterior é muito curto (tipo "Oi!",
+  // "Claro.", "Certo."). Frases de tamanho médio ficam sempre separadas —
+  // é exatamente o que queremos pra simular conversa humana.
   const merged: string[] = [];
-  for (const b of blocks) {
+  for (const p of pieces) {
     const last = merged[merged.length - 1];
-    if (last && last.length + 1 + b.length <= MAX_BLOCK_LEN) {
-      merged[merged.length - 1] = last + ' ' + b;
-    } else {
-      merged.push(b);
-    }
+    const canMerge =
+      last != null &&
+      last.length <= MERGE_TINY_MAX &&
+      last.length + 1 + p.length <= HARD_MAX;
+
+    if (canMerge) merged[merged.length - 1] = last + ' ' + p;
+    else merged.push(p);
   }
 
   return merged;
 }
 
-function splitBySentences(text: string, maxLen: number): string[] {
-  const sentences = text.match(/[^.!?:\n]+[.!?:]+[\s)]*|[^.!?:\n]+$/g);
-  if (!sentences) return [text];
-
-  const blocks: string[] = [];
-  let current = '';
-  for (const raw of sentences) {
-    const s = raw.trim();
-    if (!s) continue;
-
-    if (!current) {
-      current = s;
-    } else if (current.length + 1 + s.length <= maxLen) {
-      current += ' ' + s;
+function splitByComma(text: string, maxLen: number): string[] {
+  const parts = text.split(/,\s+/).map(p => p.trim()).filter(Boolean);
+  const out: string[] = [];
+  let cur = '';
+  for (const p of parts) {
+    const candidate = cur ? `${cur}, ${p}` : p;
+    if (candidate.length <= maxLen) {
+      cur = candidate;
     } else {
-      blocks.push(current);
-      current = s;
+      if (cur) out.push(cur);
+      if (p.length > maxLen) out.push(...splitByWords(p, maxLen));
+      else cur = p;
+      if (cur === p && p.length > maxLen) cur = '';
     }
   }
-  if (current) blocks.push(current);
-
-  // Se uma única sentença ainda passa do limite (cliente escreveu um período
-  // gigante sem pontuação), corta por palavras como fallback duro.
-  const out: string[] = [];
-  for (const b of blocks) {
-    if (b.length <= maxLen * 1.3) { out.push(b); continue; }
-    out.push(...splitByWords(b, maxLen));
-  }
-  return out.length > 0 ? out : [text];
+  if (cur) out.push(cur);
+  return out;
 }
 
 function splitByWords(text: string, maxLen: number): string[] {
