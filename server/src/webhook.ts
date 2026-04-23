@@ -5,6 +5,7 @@ import { transcribeAudio, describeImage } from './services/media.js';
 import { runSerena } from './agent/serena.js';
 import { bufferMessage, cancelBuffer, BufferedMessage } from './services/messageBuffer.js';
 import { wasSentByApi } from './services/outgoingTracker.js';
+import { setHumanSilence, isAiSilenced } from './services/silenceTimer.js';
 
 interface ParsedMessage {
   phone: string;
@@ -15,9 +16,6 @@ interface ParsedMessage {
   fromMe: boolean;
   messageId?: string;
 }
-
-// Após 24h de silêncio, uma conversa transferida volta automaticamente para a IA.
-const REACTIVATE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 function parseEvolutionPayload(body: any): ParsedMessage | null {
   try {
@@ -104,20 +102,9 @@ export async function handleWebhook(req: Request, res: Response) {
   try {
     const conv = await ConversationService.upsert(phone);
 
-    // Reativação automática: se a conversa está transferida e passou mais de
-    // 24h desde a última interação, devolve para a IA.
-    if (conv.status === 'transferred' && conv.last_message_at) {
-      const lastMs = new Date(conv.last_message_at).getTime();
-      if (Number.isFinite(lastMs) && Date.now() - lastMs > REACTIVATE_AFTER_MS) {
-        await ConversationService.reactivate(phone);
-        conv.status = 'active';
-        console.log(`[webhook] Conversa ${phone} reativada para IA após 24h de silêncio.`);
-      }
-    }
-
-    await ConversationService.updateLastMessage(phone, content);
-
-    // Salva a mensagem no banco imediatamente (aparece no CRM em tempo real)
+    // SEMPRE salva a mensagem do cliente no banco — antes de qualquer check,
+    // pra que o CRM sempre tenha o histórico completo (inclusive mensagens
+    // que chegaram enquanto humano está conduzindo a conversa).
     await MessageService.save({
       conversation_id: conv.id,
       direction: 'in',
@@ -127,11 +114,26 @@ export async function handleWebhook(req: Request, res: Response) {
       sender_type: 'client',
       timestamp: new Date().toISOString()
     });
+    await ConversationService.updateLastMessage(phone, content);
 
-    // Conversa em atendimento humano: só incrementa não lidas, não processa com IA
-    if (conv.status === 'transferred') {
+    // IA silenciada? (timer de 24h, setado pelo humano via celular ou CRM)
+    // Padrão idêntico ao n8n: GET rs:timeout:{phone}, se ainda não expirou,
+    // IA não responde — humano está no controle.
+    if (await isAiSilenced(phone)) {
       await ConversationService.incrementUnread(phone);
+      // Garante que a conversa esteja marcada como 'transferred' no CRM
+      if (conv.status !== 'transferred') {
+        await ConversationService.markTransferred(phone, 'silenciada_por_humano');
+      }
+      console.log(`[webhook] ${phone} — IA silenciada, msg salva mas não processada`);
       return;
+    }
+
+    // Silêncio expirou (ou nunca existiu): se a conversa estava marcada como
+    // 'transferred', reativa pra IA voltar a trabalhar.
+    if (conv.status === 'transferred') {
+      await ConversationService.reactivate(phone);
+      console.log(`[webhook] ${phone} reativada para IA (silêncio expirou)`);
     }
 
     // Enfileira no buffer — aguarda 30s de silêncio antes de chamar a Serena.
@@ -149,8 +151,8 @@ export async function handleWebhook(req: Request, res: Response) {
 }
 
 // Humano digitou uma mensagem direto no WhatsApp do celular (não pelo CRM).
-// Salva no banco, marca conversa como transferida se ainda não estava, e
-// cancela qualquer buffer pendente. A IA não deve mais responder.
+// Salva no banco, seta o timer de 24h (rs:timeout:{phone}) e cancela qualquer
+// buffer pendente. A IA fica silenciada até o timer expirar ou alguém limpar.
 async function handleHumanTakeoverFromPhone(parsed: ParsedMessage): Promise<void> {
   const { phone, content, type, mediaUrl } = parsed;
   try {
@@ -172,7 +174,12 @@ async function handleHumanTakeoverFromPhone(parsed: ParsedMessage): Promise<void
       await ConversationService.markTransferred(phone, 'resposta_humana_manual');
     }
 
-    await cancelBuffer(phone);
+    // Seta o timer de 24h no Redis (padrão n8n) E cancela buffer pendente
+    // para garantir que nenhuma msg do cliente dispare a IA agora.
+    await Promise.all([
+      setHumanSilence(phone),
+      cancelBuffer(phone)
+    ]);
 
     console.log(`[webhook] Humano assumiu ${phone} via celular.`);
   } catch (err: any) {
@@ -241,11 +248,13 @@ async function processBufferedMessages(
   await ConversationService.updateLastMessage(phone, result.text);
 
   // Transferência para humano: notifica equipe ANTES de enviar mensagem ao cliente.
-  // Cancela buffer pendente (mensagens que o cliente enviou durante o runSerena
-  // não devem disparar uma nova resposta da IA — humano agora está no controle).
+  // Seta timer de 24h no Redis (IA silenciada) e cancela buffer pendente.
   if (result.transfer) {
     await ConversationService.markTransferred(phone, result.transfer.reason);
-    await cancelBuffer(phone);
+    await Promise.all([
+      setHumanSilence(phone),
+      cancelBuffer(phone)
+    ]);
     await notifyTransfer(phone, result.transfer.reason, messages);
   }
 

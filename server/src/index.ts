@@ -6,6 +6,7 @@ import { supabase } from './services/supabase.js';
 import { WhatsApp } from './services/whatsapp.js';
 import { getAgentConfig, saveAgentConfig, invalidateConfigCache } from './services/agent_config.js';
 import { cancelBuffer, bufferSnapshot } from './services/messageBuffer.js';
+import { setHumanSilence, clearSilence, silenceInfo } from './services/silenceTimer.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -86,9 +87,12 @@ app.post('/api/conversations/:id/send', async (req, res) => {
       .update(updates)
       .eq('id', req.params.id);
 
-    // Descarta qualquer buffer de mensagens do cliente que estaria
-    // prestes a disparar a Serena. Humano está no controle agora.
-    await cancelBuffer(conv.phone);
+    // Seta timer de 24h no Redis (IA silenciada) e cancela buffer pendente.
+    // Humano está no controle agora.
+    await Promise.all([
+      setHumanSilence(conv.phone),
+      cancelBuffer(conv.phone)
+    ]);
 
     res.json(msg);
   } catch (err: any) {
@@ -96,13 +100,23 @@ app.post('/api/conversations/:id/send', async (req, res) => {
   }
 });
 
-// Reativar Serena para uma conversa (após atendimento humano)
+// Reativar Serena para uma conversa (após atendimento humano): remove o
+// timer de silêncio no Redis e volta o status no CRM para 'active'.
 app.post('/api/conversations/:id/reactivate', async (req, res) => {
+  const { data: conv } = await supabase
+    .from('conversations')
+    .select('phone')
+    .eq('id', req.params.id)
+    .single();
+
   const { error } = await supabase
     .from('conversations')
-    .update({ status: 'active', unread_count: 0 })
+    .update({ status: 'active', unread_count: 0, transfer_reason: null })
     .eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
+
+  if (conv?.phone) await clearSilence(conv.phone);
+
   res.json({ ok: true });
 });
 
@@ -142,6 +156,12 @@ app.get('/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString()
 // se o agente está realmente acumulando mensagens picadas por 30s.
 app.get('/debug/buffer', async (_, res) => {
   try { res.json(await bufferSnapshot()); }
+  catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Diagnóstico: a IA está silenciada pra esse phone? Em quantos segundos libera?
+app.get('/debug/silence/:phone', async (req, res) => {
+  try { res.json(await silenceInfo(req.params.phone)); }
   catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
