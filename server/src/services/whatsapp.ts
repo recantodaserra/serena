@@ -22,11 +22,13 @@ async function post(path: string, body: object) {
 }
 
 // Quebra o texto em blocos para envio separado.
-// Divide em parágrafos (dupla quebra de linha). Blocos longos são subdivididos
-// em linhas únicas, agrupando-as até o limite de caracteres.
-function splitIntoBlocks(text: string, maxLen = 350): string[] {
+// Estratégia:
+//   1. Divide por dupla quebra de linha (parágrafos explícitos da IA).
+//   2. Se um parágrafo passa de maxLen, subdivide por linhas simples.
+//   3. Se ainda estiver grande (ou se veio tudo sem \n), subdivide por sentenças.
+// Isso garante blocos pequenos mesmo quando o modelo devolve textão.
+function splitIntoBlocks(text: string, maxLen = 280): string[] {
   const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
-
   const blocks: string[] = [];
 
   for (const para of paragraphs) {
@@ -35,10 +37,16 @@ function splitIntoBlocks(text: string, maxLen = 350): string[] {
       continue;
     }
 
-    // Parágrafo longo: agrupa linhas simples até o limite
+    // Parágrafo grande: agrupa linhas simples até o limite.
     const lines = para.split('\n').map(l => l.trim()).filter(Boolean);
     let current = '';
     for (const line of lines) {
+      if (line.length > maxLen) {
+        if (current) { blocks.push(current); current = ''; }
+        // Linha única gigante — quebra por sentenças.
+        blocks.push(...splitBySentences(line, maxLen));
+        continue;
+      }
       if (!current) {
         current = line;
       } else if (current.length + 1 + line.length <= maxLen) {
@@ -51,35 +59,91 @@ function splitIntoBlocks(text: string, maxLen = 350): string[] {
     if (current) blocks.push(current);
   }
 
-  return blocks.length > 0 ? blocks : [text.trim()];
+  // Fallback final: texto sem nenhuma quebra (\n) e > maxLen.
+  if (blocks.length === 0 || (blocks.length === 1 && blocks[0].length > maxLen)) {
+    return splitBySentences(text.trim(), maxLen);
+  }
+
+  return blocks;
+}
+
+// Divide um texto longo em blocos menores cortando em fim de sentença
+// (., !, ?, :) e agrupando até o limite.
+function splitBySentences(text: string, maxLen: number): string[] {
+  const sentences = text.match(/[^.!?:\n]+[.!?:]+[\s)]*|[^.!?:\n]+$/g);
+  if (!sentences) return [text];
+
+  const blocks: string[] = [];
+  let current = '';
+  for (const raw of sentences) {
+    const s = raw.trim();
+    if (!s) continue;
+
+    if (!current) {
+      current = s;
+    } else if (current.length + 1 + s.length <= maxLen) {
+      current += ' ' + s;
+    } else {
+      blocks.push(current);
+      current = s;
+    }
+  }
+  if (current) blocks.push(current);
+
+  return blocks.length > 0 ? blocks : [text];
+}
+
+// Envia indicador "digitando..." para o número pelo tempo especificado.
+// Usa endpoint dedicado sendPresence para funcionar em qualquer versão da Evolution.
+async function sendPresence(to: string, durationMs: number) {
+  const number = to.startsWith('55') ? to : `55${to}`;
+  const payload = { number, delay: durationMs, presence: 'composing' };
+  try {
+    // Tenta formato top-level (Evolution v2+).
+    await post(`/chat/sendPresence/${INSTANCE}`, payload);
+  } catch (err) {
+    // Fallback: formato antigo (Evolution v1) com options.
+    try {
+      await post(`/chat/sendPresence/${INSTANCE}`, {
+        number,
+        options: { delay: durationMs, presence: 'composing' }
+      });
+    } catch (err2) {
+      // Se nada funciona, seguimos sem typing — não bloqueia o envio.
+      console.warn('[whatsapp] sendPresence falhou (ignorado):', (err as Error).message);
+    }
+  }
 }
 
 export const WhatsApp = {
-  // Envia texto simples. delayMs ativa o "digitando..." na Evolution API.
-  async sendText(to: string, text: string, delayMs = 0) {
+  // Envia texto simples, sem typing.
+  async sendText(to: string, text: string) {
     const number = to.startsWith('55') ? to : `55${to}`;
-    return post(`/message/sendText/${INSTANCE}`, {
-      number,
-      text,
-      options: { delay: delayMs, presence: 'composing' }
-    });
+    // Formato v2 (top-level). Evolution v1 aceita os mesmos campos se existirem.
+    return post(`/message/sendText/${INSTANCE}`, { number, text });
   },
 
-  // Envia resposta longa quebrada em blocos com typing entre cada um.
+  // Envia resposta longa quebrada em blocos com typing real entre cada um.
   async sendBlocks(to: string, text: string) {
     const blocks = splitIntoBlocks(text);
 
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
 
-      // 30ms por caractere — mínimo 800ms, máximo 3500ms
-      const typingMs = Math.min(Math.max(block.length * 30, 800), 3500);
+      // Duração do typing proporcional ao tamanho do bloco.
+      // 30ms/caractere, mínimo 900ms, máximo 3500ms.
+      const typingMs = Math.min(Math.max(block.length * 30, 900), 3500);
 
-      await WhatsApp.sendText(to, block, typingMs);
+      // 1) Dispara o "digitando..." explicitamente.
+      await sendPresence(to, typingMs);
+      // 2) Aguarda a presença ser renderizada no cliente e durar o tempo.
+      await sleep(typingMs);
+      // 3) Envia a mensagem.
+      await WhatsApp.sendText(to, block);
 
-      // Aguarda o "digitando" terminar antes do próximo bloco
+      // Pequena pausa entre blocos para parecer natural.
       if (i < blocks.length - 1) {
-        await sleep(typingMs + 400);
+        await sleep(600);
       }
     }
   },

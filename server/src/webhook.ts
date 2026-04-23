@@ -99,7 +99,7 @@ export async function handleWebhook(req: Request, res: Response) {
       return;
     }
 
-    // Enfileira no buffer — aguarda silêncio de 4s antes de chamar a Serena
+    // Enfileira no buffer — aguarda 30s de silêncio antes de chamar a Serena
     bufferMessage(
       phone,
       conv.id,
@@ -112,7 +112,7 @@ export async function handleWebhook(req: Request, res: Response) {
   }
 }
 
-// Chamado pelo buffer após o silêncio de 4s.
+// Chamado pelo buffer após 30s de silêncio.
 // Pode receber N mensagens acumuladas (texto, áudio, imagem, etc.).
 async function processBufferedMessages(
   conversationId: string,
