@@ -9,7 +9,7 @@ import {
   DollarSign, Home as HomeIcon, MapPin, Wallet, Image as ImageIcon, Save,
   RefreshCw, DownloadCloud, FileText, Upload, Camera, Settings, Search, Filter, Ban,
   PenLine, List, TrendingUp, Video, PlayCircle, FileInput, MoreVertical, XCircle, AlertTriangle,
-  FileSpreadsheet, ArrowUpFromLine, Info, MessageSquare, Bot
+  FileSpreadsheet, ArrowUpFromLine, Info, MessageSquare, Bot, Menu
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ChatPage from './Chat';
@@ -440,7 +440,7 @@ const ImportSpreadsheetModal: React.FC<ImportSpreadsheetModalProps> = ({ chalets
 
           {/* STEP: UPLOAD */}
           {step === 'upload' && (
-            <div className="p-8 flex flex-col items-center gap-6">
+            <div className="p-4 sm:p-8 flex flex-col items-center gap-6">
               <div className="bg-blue-50 border-2 border-dashed border-blue-300 rounded-2xl p-10 flex flex-col items-center gap-4 w-full cursor-pointer hover:bg-blue-100 transition-colors" onClick={() => fileInputRef.current?.click()}>
                 <ArrowUpFromLine size={48} className="text-blue-400" />
                 <div className="text-center">
@@ -451,7 +451,7 @@ const ImportSpreadsheetModal: React.FC<ImportSpreadsheetModalProps> = ({ chalets
               </div>
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 w-full">
                 <p className="text-xs font-bold text-amber-700 uppercase mb-2 flex items-center gap-1"><Info size={14}/> Formato esperado das colunas (na ordem):</p>
-                <div className="grid grid-cols-4 gap-1 text-xs text-amber-800">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 text-xs text-amber-800">
                   {['A: Chalé', 'B: Entrada (DD/MM/AAAA)', 'C: Saída (DD/MM/AAAA)', 'D: Origem',
                     'E: Titular (Hóspede 1)', 'F: CPF Titular', 'G: Telefone', 'H: Acompanhante',
                     'I: Valor Total (R$)', 'J: Forma de Pagamento', 'K: Status do Pagamento', 'L: Observações'
@@ -768,8 +768,8 @@ const ReservationManager = () => {
   const remainingBalance = Number(formData.totalValue) - Number(formData.amountPaid);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in h-auto lg:h-[calc(100vh-100px)]">
-      <div className={`lg:col-span-1 bg-white rounded-xl shadow-lg border flex flex-col overflow-hidden h-auto lg:h-full transition-colors ${editingId ? 'border-serra-accent/50 ring-1 ring-serra-accent/20' : 'border-gray-200'}`}>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+      <div className={`lg:col-span-1 bg-white rounded-xl shadow-lg border flex flex-col overflow-hidden h-auto lg:h-[calc(100vh-180px)] transition-colors ${editingId ? 'border-serra-accent/50 ring-1 ring-serra-accent/20' : 'border-gray-200'}`}>
         <div className={`p-4 border-b flex items-center justify-between ${editingId ? 'bg-serra-accent/5 border-serra-accent/20' : 'border-gray-100'}`}>
           <div className="flex items-center gap-2">
             {editingId ? <Edit className="text-serra-accent" size={20} /> : <Plus className="text-green-600" size={20} />}
@@ -998,7 +998,7 @@ const ReservationManager = () => {
         </div>
       </div>
 
-      <div className="lg:col-span-2 flex flex-col h-[600px] lg:h-full space-y-4">
+      <div className="lg:col-span-2 flex flex-col h-auto lg:h-[calc(100vh-180px)] space-y-4">
          
          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
@@ -1017,27 +1017,27 @@ const ReservationManager = () => {
             </div>
          </div>
 
-         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-wrap items-center gap-4">
+         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Filtro:</span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
                <input
                  type="date"
                  value={filterStartDate}
                  onChange={(e) => setFilterStartDate(e.target.value)}
-                 className="bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm outline-none text-gray-600 focus:border-serra-accent"
+                 className="bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-sm outline-none text-gray-600 focus:border-serra-accent"
                />
                <span className="text-gray-400">-</span>
                <input
                  type="date"
                  value={filterEndDate}
                  onChange={(e) => setFilterEndDate(e.target.value)}
-                 className="bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm outline-none text-gray-600 focus:border-serra-accent"
+                 className="bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-sm outline-none text-gray-600 focus:border-serra-accent"
                />
             </div>
             <select
               value={filterChaletId}
               onChange={(e) => setFilterChaletId(e.target.value)}
-              className="bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm outline-none text-gray-600 focus:border-serra-accent"
+              className="bg-gray-50 border border-gray-200 rounded px-2 py-1.5 text-sm outline-none text-gray-600 focus:border-serra-accent w-full sm:w-auto"
             >
               <option value="">Todos os chalés</option>
               {chalets.map(c => (
@@ -1261,11 +1261,11 @@ const CalendarManager = () => {
 
   return (
     <div className="space-y-6">
-       <div className="flex justify-between items-center">
-          <h2 className="font-serif text-3xl font-bold text-serra-dark">Calendário & Tarifas</h2>
-          <div className="flex items-center gap-4">
+       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-serra-dark">Calendário & Tarifas</h2>
+          <div className="flex items-center gap-2 sm:gap-4">
              <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="p-2 hover:bg-gray-200 rounded-full"><ChevronLeft /></button>
-             <span className="font-bold text-lg w-40 text-center capitalize">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</span>
+             <span className="font-bold text-base sm:text-lg w-32 sm:w-40 text-center capitalize">{format(currentDate, 'MMMM yyyy', { locale: ptBR })}</span>
              <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="p-2 hover:bg-gray-200 rounded-full"><ChevronRight /></button>
           </div>
        </div>
@@ -1304,10 +1304,10 @@ const CalendarManager = () => {
                      <div
                         key={dateStr}
                         onClick={() => res ? setSelectedRes(res) : setSelectedDate(dateStr)}
-                        className={`min-h-[80px] border rounded-lg p-2 cursor-pointer transition-all relative ${isSelected ? 'ring-2 ring-serra-accent border-transparent' : 'border-gray-100 hover:border-serra-accent'} ${res ? (res.type === 'maintenance' ? 'bg-gray-100' : 'bg-red-50') : 'bg-white'}`}
+                        className={`min-h-[48px] sm:min-h-[80px] border rounded-lg p-1 sm:p-2 cursor-pointer transition-all relative ${isSelected ? 'ring-2 ring-serra-accent border-transparent' : 'border-gray-100 hover:border-serra-accent'} ${res ? (res.type === 'maintenance' ? 'bg-gray-100' : 'bg-red-50') : 'bg-white'}`}
                      >
-                        <span className="text-xs font-bold text-gray-700">{format(day, 'd')}</span>
-                        <div className="mt-1">
+                        <span className="text-[10px] sm:text-xs font-bold text-gray-700">{format(day, 'd')}</span>
+                        <div className="mt-0.5 sm:mt-1 hidden sm:block">
                             {res ? (
                                 <span className="block text-[10px] bg-white/50 px-1 rounded truncate text-gray-600">
                                     {res.type === 'maintenance' ? 'Manut.' : res.guest1Name}
@@ -1318,6 +1318,15 @@ const CalendarManager = () => {
                                 </span>
                             )}
                         </div>
+                        <div className="mt-0.5 sm:hidden">
+                            {res ? (
+                                <div className={`w-full h-1 rounded-full ${res.type === 'maintenance' ? 'bg-gray-400' : 'bg-red-400'}`} />
+                            ) : (
+                                <span className={`block text-[9px] font-medium leading-tight ${customPrice ? 'text-blue-600' : 'text-green-600'}`}>
+                                    {Math.round(finalPrice)}
+                                </span>
+                            )}
+                        </div>
                      </div>
                  );
              })}
@@ -1325,7 +1334,7 @@ const CalendarManager = () => {
        </div>
 
        {/* Seção de preços padrão por dia da semana */}
-       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
           <div className="flex items-center gap-2 mb-4">
             <DollarSign size={18} className="text-serra-accent" />
             <h3 className="font-bold text-gray-800">Preços Padrão por Dia da Semana</h3>
@@ -1377,17 +1386,21 @@ const CalendarManager = () => {
        </div>
 
        {selectedDate && (
-           <div className="fixed bottom-0 left-0 right-0 bg-white p-4 shadow-2xl border-t border-gray-200 flex items-center justify-center gap-4 z-50 animate-slide-up">
-               <span className="font-bold text-gray-700">Editar dia {format(parseISO(selectedDate), 'dd/MM/yyyy')}</span>
-               <input
-                 type="number"
-                 placeholder="Novo Preço"
-                 value={newPrice}
-                 onChange={(e) => setNewPrice(e.target.value)}
-                 className="p-2 border rounded w-32"
-               />
-               <button onClick={handleSetPrice} className="bg-serra-accent text-white px-4 py-2 rounded font-bold hover:bg-serra-dark">Salvar Preço</button>
-               <button onClick={() => setSelectedDate(null)} className="text-gray-500 hover:text-gray-700">Cancelar</button>
+           <div className="fixed bottom-0 left-0 right-0 bg-white p-4 shadow-2xl border-t border-gray-200 z-50 animate-slide-up">
+               <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                 <span className="font-bold text-gray-700 text-sm">Editar dia {format(parseISO(selectedDate), 'dd/MM/yyyy')}</span>
+                 <div className="flex items-center gap-2 w-full sm:w-auto">
+                   <input
+                     type="number"
+                     placeholder="Novo Preço"
+                     value={newPrice}
+                     onChange={(e) => setNewPrice(e.target.value)}
+                     className="p-2 border rounded flex-1 sm:w-32"
+                   />
+                   <button onClick={handleSetPrice} className="bg-serra-accent text-white px-4 py-2 rounded font-bold hover:bg-serra-dark whitespace-nowrap">Salvar</button>
+                   <button onClick={() => setSelectedDate(null)} className="text-gray-500 hover:text-gray-700 p-2"><X size={20} /></button>
+                 </div>
+               </div>
            </div>
        )}
 
@@ -1543,21 +1556,21 @@ const FinancialManager = () => {
                 <p className="text-gray-500 mt-2">Acompanhe o desempenho financeiro do Recanto.</p>
             </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <span className="font-bold text-gray-700 text-lg">Período de Análise</span>
-                <div className="flex items-center gap-3 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                    <input 
-                        type="date" 
+                <div className="flex items-center gap-2 sm:gap-3 bg-gray-50 p-2 rounded-lg border border-gray-200 flex-wrap">
+                    <input
+                        type="date"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
-                        className="bg-transparent text-gray-700 outline-none font-medium cursor-pointer"
+                        className="bg-transparent text-gray-700 outline-none font-medium cursor-pointer text-sm"
                     />
                     <span className="text-gray-400">até</span>
-                    <input 
-                        type="date" 
+                    <input
+                        type="date"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
-                        className="bg-transparent text-gray-700 outline-none font-medium cursor-pointer"
+                        className="bg-transparent text-gray-700 outline-none font-medium cursor-pointer text-sm"
                     />
                 </div>
             </div>
@@ -1581,7 +1594,7 @@ const FinancialManager = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-8">
                 <h3 className="font-bold text-lg text-gray-800 mb-6 flex items-center gap-2">
                     <BarChart3 size={20} className="text-serra-dark"/> Desempenho por Chalé
                 </h3>
@@ -1721,7 +1734,7 @@ const GalleryManager = () => {
         </div>
 
         <div className="lg:col-span-2">
-           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 min-h-[400px]">
+           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 min-h-[400px]">
               <h3 className="font-bold text-lg mb-6 text-gray-700 flex items-center justify-between">
                 <span>Itens da Galeria ({filteredItems.length})</span>
                 <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-1 rounded">
@@ -1828,7 +1841,7 @@ const SiteConfigManager = () => {
            </div>
         </div>
 
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
            <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-serra-dark">
              <ImageIcon size={20} /> Imagens do Banner Principal
            </h3>
@@ -2001,7 +2014,7 @@ const ChaletManager = () => {
              </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow p-8 border border-gray-200">
+          <div className="bg-white rounded-xl shadow p-4 sm:p-8 border border-gray-200">
             <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-serra-dark">
               <PenLine size={20} className="text-serra-accent"/> Informações Principais
             </h3>
@@ -2014,7 +2027,7 @@ const ChaletManager = () => {
                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição Completa</label>
                  <textarea name="description" rows={4} value={formData.description} onChange={handleInputChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-serra-accent resize-none"></textarea>
                </div>
-               <div className="grid grid-cols-2 gap-6">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Preço Base (Fim de Semana)</label>
                     <div className="relative">
@@ -2030,7 +2043,7 @@ const ChaletManager = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow p-8 border border-gray-200">
+          <div className="bg-white rounded-xl shadow p-4 sm:p-8 border border-gray-200">
              <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-serra-dark">
                <List size={20} className="text-serra-accent"/> Comodidades
              </h3>
@@ -2038,7 +2051,7 @@ const ChaletManager = () => {
              <textarea rows={6} value={formData.amenities.join('\n')} onChange={handleAmenityChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-serra-accent font-mono text-sm"></textarea>
           </div>
 
-          <div className="bg-white rounded-xl shadow p-8 border border-gray-200">
+          <div className="bg-white rounded-xl shadow p-4 sm:p-8 border border-gray-200">
              <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-serra-dark">
                <ImageIcon size={20} className="text-serra-accent"/> Gestão de Imagens
              </h3>
@@ -2062,7 +2075,7 @@ const ChaletManager = () => {
 
              <label className="text-xs font-bold text-gray-500 uppercase mb-3 block">Galeria de Fotos</label>
              <input type="file" multiple ref={galleryInputRef} className="hidden" onChange={handleGalleryUpload}/>
-             <div className="grid grid-cols-4 gap-4">
+             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                 {formData.images.map((url, i) => (
                   <div key={i} className="relative aspect-square group rounded-lg overflow-hidden shadow-sm">
                     <img src={url} className="w-full h-full object-cover"/>
@@ -2086,59 +2099,110 @@ const ChaletManager = () => {
   );
 };
 
+const TAB_LABELS: Record<string, string> = {
+  reservas: 'Reservas',
+  calendario: 'Calendário',
+  chales: 'Acomodações',
+  galeria: 'Galeria',
+  financeiro: 'Financeiro',
+  config: 'Config.',
+  conversas: 'WhatsApp',
+  agente: 'Serena IA',
+};
+
 const Admin = () => {
   const [activeTab, setActiveTab] = useState('reservas');
-  
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    setSidebarOpen(false);
+  };
+
+  const sidebarNavBtn = (tab: string, icon: React.ReactNode, label: string, activeClass = 'bg-serra-accent') => (
+    <button
+      onClick={() => handleTabChange(tab)}
+      className={`flex items-center gap-3 w-full text-left p-3 rounded-lg font-medium transition-colors ${activeTab === tab ? `${activeClass} text-white shadow-lg` : 'hover:bg-white/10 text-gray-300'}`}
+    >
+      {icon} {label}
+    </button>
+  );
+
   return (
     <div className="flex min-h-screen bg-gray-100 font-sans">
-      <aside className="w-64 bg-serra-dark text-white hidden md:flex flex-col p-4 space-y-2">
-        <h1 className="text-xl font-bold mb-6 px-2">
-           Recanto<span className="text-serra-accent">Admin</span>
-           <span className="block text-[10px] text-gray-400 font-normal">Painel de Controle</span>
-        </h1>
-        
-        <button onClick={() => setActiveTab('reservas')} className={`flex items-center gap-3 w-full text-left p-3 rounded-lg font-medium transition-colors ${activeTab==='reservas' ? 'bg-serra-accent text-white shadow-lg' : 'hover:bg-white/10 text-gray-300'}`}>
-           <ListTodo size={18} /> Gestão de Reservas
-        </button>
-        <button onClick={() => setActiveTab('calendario')} className={`flex items-center gap-3 w-full text-left p-3 rounded-lg font-medium transition-colors ${activeTab==='calendario' ? 'bg-serra-accent text-white shadow-lg' : 'hover:bg-white/10 text-gray-300'}`}>
-           <CalendarIcon size={18} /> Calendário & Tarifas
-        </button>
-        <button onClick={() => setActiveTab('chales')} className={`flex items-center gap-3 w-full text-left p-3 rounded-lg font-medium transition-colors ${activeTab==='chales' ? 'bg-serra-accent text-white shadow-lg' : 'hover:bg-white/10 text-gray-300'}`}>
-           <HomeIcon size={18} /> Gestão de Acomodações
-        </button>
-        <button onClick={() => setActiveTab('galeria')} className={`flex items-center gap-3 w-full text-left p-3 rounded-lg font-medium transition-colors ${activeTab==='galeria' ? 'bg-serra-accent text-white shadow-lg' : 'hover:bg-white/10 text-gray-300'}`}>
-           <ImageIcon size={18} /> Galeria de Mídia
-        </button>
-        <button onClick={() => setActiveTab('financeiro')} className={`flex items-center gap-3 w-full text-left p-3 rounded-lg font-medium transition-colors ${activeTab==='financeiro' ? 'bg-serra-accent text-white shadow-lg' : 'hover:bg-white/10 text-gray-300'}`}>
-           <BarChart3 size={18} /> Relatórios Financeiros
-        </button>
-        <button onClick={() => setActiveTab('config')} className={`flex items-center gap-3 w-full text-left p-3 rounded-lg font-medium transition-colors ${activeTab==='config' ? 'bg-serra-accent text-white shadow-lg' : 'hover:bg-white/10 text-gray-300'}`}>
-           <Settings size={18} /> Configurações do Site
-        </button>
+      {/* Overlay mobile */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`
+        fixed md:static inset-y-0 left-0 z-50
+        w-64 bg-serra-dark text-white flex flex-col p-4 space-y-2
+        transform transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:translate-x-0
+      `}>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-bold px-2">
+            Recanto<span className="text-serra-accent">Admin</span>
+            <span className="block text-[10px] text-gray-400 font-normal">Painel de Controle</span>
+          </h1>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden text-gray-400 hover:text-white p-1"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {sidebarNavBtn('reservas', <ListTodo size={18} />, 'Gestão de Reservas')}
+        {sidebarNavBtn('calendario', <CalendarIcon size={18} />, 'Calendário & Tarifas')}
+        {sidebarNavBtn('chales', <HomeIcon size={18} />, 'Gestão de Acomodações')}
+        {sidebarNavBtn('galeria', <ImageIcon size={18} />, 'Galeria de Mídia')}
+        {sidebarNavBtn('financeiro', <BarChart3 size={18} />, 'Relatórios Financeiros')}
+        {sidebarNavBtn('config', <Settings size={18} />, 'Configurações do Site')}
 
         <div className="border-t border-white/10 my-2" />
 
-        <button onClick={() => setActiveTab('conversas')} className={`flex items-center gap-3 w-full text-left p-3 rounded-lg font-medium transition-colors ${activeTab==='conversas' ? 'bg-purple-600 text-white shadow-lg' : 'hover:bg-white/10 text-gray-300'}`}>
-           <MessageSquare size={18} /> Conversas WhatsApp
-        </button>
-        <button onClick={() => setActiveTab('agente')} className={`flex items-center gap-3 w-full text-left p-3 rounded-lg font-medium transition-colors ${activeTab==='agente' ? 'bg-purple-600 text-white shadow-lg' : 'hover:bg-white/10 text-gray-300'}`}>
-           <Bot size={18} /> Agente IA — Serena
-        </button>
+        {sidebarNavBtn('conversas', <MessageSquare size={18} />, 'Conversas WhatsApp', 'bg-purple-600')}
+        {sidebarNavBtn('agente', <Bot size={18} />, 'Agente IA — Serena', 'bg-purple-600')}
 
         <Link to="/" className="mt-auto flex items-center gap-3 p-3 text-red-300 hover:text-white transition-colors">
-           <LogOut size={18} /> Sair do Sistema
+          <LogOut size={18} /> Sair do Sistema
         </Link>
       </aside>
-      <main className="flex-1 p-8 overflow-y-auto h-screen">
-         {activeTab === 'reservas' && <ReservationManager />}
-         {activeTab === 'calendario' && <CalendarManager />}
-         {activeTab === 'chales' && <ChaletManager />}
-         {activeTab === 'galeria' && <GalleryManager />}
-         {activeTab === 'financeiro' && <FinancialManager />}
-         {activeTab === 'config' && <SiteConfigManager />}
-         {activeTab === 'conversas' && <div className="-m-8"><ChatPage embedded /></div>}
-         {activeTab === 'agente' && <AgentConfigManager />}
-      </main>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+        {/* Mobile top bar */}
+        <div className="md:hidden flex items-center gap-3 bg-serra-dark text-white px-4 py-3 shadow-lg sticky top-0 z-30">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+          >
+            <Menu size={22} />
+          </button>
+          <span className="font-bold text-sm">
+            Recanto<span className="text-serra-accent">Admin</span>
+            <span className="text-gray-400 font-normal ml-2">— {TAB_LABELS[activeTab]}</span>
+          </span>
+        </div>
+
+        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+          {activeTab === 'reservas' && <ReservationManager />}
+          {activeTab === 'calendario' && <CalendarManager />}
+          {activeTab === 'chales' && <ChaletManager />}
+          {activeTab === 'galeria' && <GalleryManager />}
+          {activeTab === 'financeiro' && <FinancialManager />}
+          {activeTab === 'config' && <SiteConfigManager />}
+          {activeTab === 'conversas' && <div className="-mx-4 md:-mx-8"><ChatPage embedded /></div>}
+          {activeTab === 'agente' && <AgentConfigManager />}
+        </main>
+      </div>
     </div>
   );
 };
