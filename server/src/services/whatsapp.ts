@@ -1,8 +1,19 @@
 import 'dotenv/config';
+import { trackOutgoing } from './outgoingTracker.js';
 
 const BASE_URL = process.env.EVOLUTION_API_URL!;
 const API_KEY = process.env.EVOLUTION_API_KEY!;
 const INSTANCE = process.env.EVOLUTION_INSTANCE || 'Recanto';
+
+// Extrai o ID da mensagem do retorno da Evolution, testando os formatos
+// conhecidos (v1 e v2). Qualquer um que vier, registramos para deduplicação.
+function extractMessageId(response: any): string | undefined {
+  if (!response) return undefined;
+  return response?.key?.id
+    || response?.messageId
+    || response?.id
+    || undefined;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
@@ -120,7 +131,11 @@ export const WhatsApp = {
   async sendText(to: string, text: string) {
     const number = to.startsWith('55') ? to : `55${to}`;
     // Formato v2 (top-level). Evolution v1 aceita os mesmos campos se existirem.
-    return post(`/message/sendText/${INSTANCE}`, { number, text });
+    const response = await post(`/message/sendText/${INSTANCE}`, { number, text });
+    // Registra o messageId para que o webhook saiba que esse eco é nosso,
+    // não uma mensagem digitada pelo humano no celular.
+    trackOutgoing(extractMessageId(response));
+    return response;
   },
 
   // Envia resposta longa quebrada em blocos com typing real entre cada um.

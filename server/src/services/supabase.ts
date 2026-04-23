@@ -91,6 +91,13 @@ export const ConversationService = {
       .from('conversations')
       .update({ status: 'transferred', transferred_at: new Date().toISOString(), transfer_reason: reason })
       .eq('phone', phone);
+  },
+
+  async reactivate(phone: string) {
+    await supabase
+      .from('conversations')
+      .update({ status: 'active', unread_count: 0, transfer_reason: null })
+      .eq('phone', phone);
   }
 };
 

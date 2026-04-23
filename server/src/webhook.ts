@@ -4,6 +4,7 @@ import { WhatsApp } from './services/whatsapp.js';
 import { transcribeAudio, describeImage } from './services/media.js';
 import { runSerena } from './agent/serena.js';
 import { bufferMessage, cancelBuffer, BufferedMessage } from './services/messageBuffer.js';
+import { wasSentByApi } from './services/outgoingTracker.js';
 
 interface ParsedMessage {
   phone: string;
@@ -12,7 +13,11 @@ interface ParsedMessage {
   mediaBase64?: string;
   mediaUrl?: string;
   fromMe: boolean;
+  messageId?: string;
 }
+
+// Após 24h de silêncio, uma conversa transferida volta automaticamente para a IA.
+const REACTIVATE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 function parseEvolutionPayload(body: any): ParsedMessage | null {
   try {
@@ -20,6 +25,7 @@ function parseEvolutionPayload(body: any): ParsedMessage | null {
     if (!data) return null;
 
     const fromMe = data.key?.fromMe === true;
+    const messageId: string | undefined = data.key?.id;
     const remoteJid: string = data.key?.remoteJid || '';
 
     const phoneMatch = remoteJid.match(/55(\d+)@/);
@@ -57,7 +63,7 @@ function parseEvolutionPayload(body: any): ParsedMessage | null {
       return null;
     }
 
-    return { phone, content, type, mediaUrl, mediaBase64, fromMe };
+    return { phone, content, type, mediaUrl, mediaBase64, fromMe, messageId };
   } catch {
     return null;
   }
@@ -69,10 +75,19 @@ export async function handleWebhook(req: Request, res: Response) {
   res.sendStatus(200);
 
   const parsed = parseEvolutionPayload(req.body);
-  if (!parsed || parsed.fromMe) return;
+  if (!parsed) return;
 
   if (ALLOWED_PHONES.length > 0 && !ALLOWED_PHONES.includes(parsed.phone)) {
     console.log(`[webhook] Número ${parsed.phone} bloqueado pelo filtro`);
+    return;
+  }
+
+  // fromMe=true pode ter 2 origens:
+  //   (a) Nossa API (Serena ou endpoint manual do CRM) → é eco, ignorar.
+  //   (b) Humano digitando direto no WhatsApp do celular → assumir a conversa.
+  if (parsed.fromMe) {
+    if (wasSentByApi(parsed.messageId)) return;
+    await handleHumanTakeoverFromPhone(parsed);
     return;
   }
 
@@ -80,6 +95,18 @@ export async function handleWebhook(req: Request, res: Response) {
 
   try {
     const conv = await ConversationService.upsert(phone);
+
+    // Reativação automática: se a conversa está transferida e passou mais de
+    // 24h desde a última interação, devolve para a IA.
+    if (conv.status === 'transferred' && conv.last_message_at) {
+      const lastMs = new Date(conv.last_message_at).getTime();
+      if (Number.isFinite(lastMs) && Date.now() - lastMs > REACTIVATE_AFTER_MS) {
+        await ConversationService.reactivate(phone);
+        conv.status = 'active';
+        console.log(`[webhook] Conversa ${phone} reativada para IA após 24h de silêncio.`);
+      }
+    }
+
     await ConversationService.updateLastMessage(phone, content);
 
     // Salva a mensagem no banco imediatamente (aparece no CRM em tempo real)
@@ -109,6 +136,38 @@ export async function handleWebhook(req: Request, res: Response) {
 
   } catch (err: any) {
     console.error(`[webhook] Erro ao receber mensagem de ${phone}:`, err.message);
+  }
+}
+
+// Humano digitou uma mensagem direto no WhatsApp do celular (não pelo CRM).
+// Salva no banco, marca conversa como transferida se ainda não estava, e
+// cancela qualquer buffer pendente. A IA não deve mais responder.
+async function handleHumanTakeoverFromPhone(parsed: ParsedMessage): Promise<void> {
+  const { phone, content, type, mediaUrl } = parsed;
+  try {
+    const conv = await ConversationService.upsert(phone);
+
+    await MessageService.save({
+      conversation_id: conv.id,
+      direction: 'out',
+      content,
+      type: type as any,
+      media_url: mediaUrl,
+      sender_type: 'human',
+      timestamp: new Date().toISOString()
+    });
+
+    await ConversationService.updateLastMessage(phone, content);
+
+    if (conv.status !== 'transferred') {
+      await ConversationService.markTransferred(phone, 'resposta_humana_manual');
+    }
+
+    cancelBuffer(phone);
+
+    console.log(`[webhook] Humano assumiu ${phone} via celular.`);
+  } catch (err: any) {
+    console.error(`[webhook] Erro em takeover de ${phone}:`, err.message);
   }
 }
 
