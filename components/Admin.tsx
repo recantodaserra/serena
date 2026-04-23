@@ -1144,6 +1144,72 @@ const CalendarManager = () => {
   const [savingPrices, setSavingPrices] = useState(false);
   const [savedPrices, setSavedPrices] = useState(false);
 
+  // Estado para edição de reserva inline
+  const [editingRes, setEditingRes] = useState<Reservation | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    chaletId: '', startDate: '', endDate: '', origin: '',
+    guest1Name: '', guest1Cpf: '', guest1Phone: '',
+    guest2Name: '', guest2Cpf: '',
+    totalValue: 0, amountPaid: 0,
+    paymentMethod: 'Pix', paymentType: 'Integral',
+    observations: ''
+  });
+
+  const handleOpenEdit = (res: Reservation) => {
+    setSelectedRes(null);
+    setEditForm({
+      chaletId: res.chaletId,
+      startDate: res.startDate,
+      endDate: res.endDate,
+      origin: res.origin || 'WhatsApp',
+      guest1Name: res.guest1Name,
+      guest1Cpf: res.guest1Cpf || '',
+      guest1Phone: res.guest1Phone || '',
+      guest2Name: res.guest2Name || '',
+      guest2Cpf: res.guest2Cpf || '',
+      totalValue: res.totalValue,
+      amountPaid: res.amountPaid || 0,
+      paymentMethod: res.paymentMethod || 'Pix',
+      paymentType: res.paymentType || 'Integral',
+      observations: res.observations || ''
+    });
+    setEditingRes(res);
+  };
+
+  const handleEditSave = async () => {
+    if (!editingRes) return;
+    setEditSaving(true);
+    try {
+      const finalAmountPaid = editForm.paymentType === 'Integral'
+        ? Number(editForm.totalValue)
+        : Number(editForm.amountPaid);
+      await ReservationService.update({
+        ...editingRes,
+        chaletId: editForm.chaletId,
+        startDate: editForm.startDate,
+        endDate: editForm.endDate,
+        origin: editForm.origin,
+        guest1Name: editForm.guest1Name,
+        guest1Cpf: editForm.guest1Cpf,
+        guest1Phone: editForm.guest1Phone,
+        guest2Name: editForm.guest2Name,
+        guest2Cpf: editForm.guest2Cpf,
+        totalValue: Number(editForm.totalValue),
+        amountPaid: finalAmountPaid,
+        paymentMethod: editForm.paymentMethod,
+        paymentType: editForm.paymentType as 'Integral' | 'Parcial',
+        observations: editForm.observations,
+      });
+      setEditingRes(null);
+      loadData();
+    } catch (e: any) {
+      alert('Erro ao salvar: ' + e.message);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const loadData = async () => {
      const [c, r, p] = await Promise.all([ChaletService.getAll(), ReservationService.getAll(), PricingService.getAll()]);
      setChalets(c);
@@ -1330,10 +1396,117 @@ const CalendarManager = () => {
            reservation={selectedRes}
            chalets={chalets}
            onClose={() => setSelectedRes(null)}
-           onDelete={async (id) => { await ReservationService.delete(id); setSelectedRes(null); loadData(); }}
-           onEdit={() => { setSelectedRes(null); loadData(); }}
+           onDelete={async (id) => { await ReservationService.remove(id); setSelectedRes(null); loadData(); }}
+           onEdit={handleOpenEdit}
            onSettle={async (res) => { await ReservationService.update({ ...res, amountPaid: Number(res.totalValue), paymentType: 'Integral' }); setSelectedRes(null); loadData(); }}
          />
+       )}
+
+       {/* Modal de Edição Inline */}
+       {editingRes && (
+         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setEditingRes(null)}>
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+             <div className="bg-serra-dark p-5 text-white flex items-center justify-between">
+               <div className="flex items-center gap-3">
+                 <Edit size={20} />
+                 <h3 className="font-bold text-lg">Editar Reserva</h3>
+               </div>
+               <button onClick={() => setEditingRes(null)} className="text-white/70 hover:text-white"><X size={22} /></button>
+             </div>
+             <div className="p-6 overflow-y-auto flex-1 space-y-4">
+               {/* Chalé */}
+               <div>
+                 <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Chalé</label>
+                 <select value={editForm.chaletId} onChange={e => setEditForm(p => ({...p, chaletId: e.target.value}))}
+                   className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-serra-accent">
+                   {chalets.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                 </select>
+               </div>
+               {/* Datas */}
+               <div className="grid grid-cols-2 gap-3">
+                 <div>
+                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Entrada *</label>
+                   <input type="date" value={editForm.startDate} onChange={e => setEditForm(p => ({...p, startDate: e.target.value}))}
+                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-serra-accent" />
+                 </div>
+                 <div>
+                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Saída *</label>
+                   <input type="date" value={editForm.endDate} onChange={e => setEditForm(p => ({...p, endDate: e.target.value}))}
+                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-serra-accent" />
+                 </div>
+               </div>
+               {/* Hóspede */}
+               <div>
+                 <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Titular *</label>
+                 <input type="text" value={editForm.guest1Name} onChange={e => setEditForm(p => ({...p, guest1Name: e.target.value}))}
+                   className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-serra-accent" placeholder="Nome do titular" />
+               </div>
+               <div className="grid grid-cols-2 gap-3">
+                 <div>
+                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Telefone</label>
+                   <input type="text" value={editForm.guest1Phone} onChange={e => setEditForm(p => ({...p, guest1Phone: e.target.value}))}
+                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-serra-accent" placeholder="(00) 00000-0000" />
+                 </div>
+                 <div>
+                   <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Acompanhante</label>
+                   <input type="text" value={editForm.guest2Name} onChange={e => setEditForm(p => ({...p, guest2Name: e.target.value}))}
+                     className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-serra-accent" placeholder="Nome" />
+                 </div>
+               </div>
+               {/* Origem */}
+               <div>
+                 <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Origem / Obs</label>
+                 <input type="text" value={editForm.origin} onChange={e => setEditForm(p => ({...p, origin: e.target.value}))}
+                   className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-serra-accent" placeholder="WhatsApp, Google, etc." />
+               </div>
+               {/* Financeiro */}
+               <div className="border-t border-gray-100 pt-4">
+                 <p className="text-xs font-bold text-gray-500 uppercase mb-3">Financeiro</p>
+                 <div className="grid grid-cols-2 gap-3">
+                   <div>
+                     <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Valor Total (R$)</label>
+                     <input type="number" value={editForm.totalValue} onChange={e => setEditForm(p => ({...p, totalValue: Number(e.target.value)}))}
+                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-serra-accent" />
+                   </div>
+                   <div>
+                     <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Forma de Pgto</label>
+                     <select value={editForm.paymentMethod} onChange={e => setEditForm(p => ({...p, paymentMethod: e.target.value}))}
+                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-serra-accent">
+                       {['Pix','Dinheiro','Crédito','Débito','Cartão (Link)','Misto'].map(m => <option key={m} value={m}>{m}</option>)}
+                     </select>
+                   </div>
+                 </div>
+                 <div className="flex gap-4 mt-3">
+                   {['Integral','Parcial'].map(type => (
+                     <label key={type} className="flex items-center gap-2 cursor-pointer">
+                       <input type="radio" name="calEditPayType" checked={editForm.paymentType === type}
+                         onChange={() => setEditForm(p => ({...p, paymentType: type}))}
+                         className="accent-serra-accent" />
+                       <span className="text-sm font-medium text-gray-700">{type}</span>
+                     </label>
+                   ))}
+                 </div>
+                 {editForm.paymentType === 'Parcial' && (
+                   <div className="mt-3">
+                     <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Valor Pago (R$)</label>
+                     <input type="number" value={editForm.amountPaid} onChange={e => setEditForm(p => ({...p, amountPaid: Number(e.target.value)}))}
+                       className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-serra-accent" />
+                   </div>
+                 )}
+               </div>
+             </div>
+             <div className="p-4 bg-gray-50 border-t border-gray-200 flex gap-3">
+               <button onClick={() => setEditingRes(null)}
+                 className="flex-1 py-3 border border-gray-300 rounded-lg font-bold text-gray-600 hover:bg-gray-100 transition-colors">
+                 Cancelar
+               </button>
+               <button onClick={handleEditSave} disabled={editSaving}
+                 className="flex-1 bg-serra-accent hover:bg-serra-dark disabled:opacity-50 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors">
+                 <Save size={16} />{editSaving ? 'Salvando...' : 'Salvar Alterações'}
+               </button>
+             </div>
+           </div>
+         </div>
        )}
     </div>
   );
