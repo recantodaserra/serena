@@ -164,7 +164,7 @@ export const ReservationDB = {
   },
 
   async getChalets() {
-    const { data } = await supabase.from('chalets').select('id, name, base_price');
+    const { data } = await supabase.from('chalets').select('id, name, base_price, weekday_price');
     return data || [];
   },
 
