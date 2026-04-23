@@ -150,7 +150,46 @@ app.put('/api/agent-config', async (req, res) => {
   }
 });
 
-app.get('/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
+app.get('/health', async (_, res) => {
+  const result: any = { ok: true, ts: new Date().toISOString(), checks: {} };
+
+  // Supabase
+  try {
+    const { error } = await supabase.from('conversations').select('id').limit(1);
+    result.checks.supabase = error ? { ok: false, error: error.message } : { ok: true };
+  } catch (err: any) {
+    result.checks.supabase = { ok: false, error: err.message };
+  }
+
+  // Redis
+  const { redisConfigured } = await import('./services/redis.js');
+  result.checks.redis = { configured: redisConfigured };
+  if (redisConfigured) {
+    try {
+      const { Redis } = await import('./services/redis.js');
+      await Redis.get('__healthcheck__');
+      result.checks.redis.ok = true;
+    } catch (err: any) {
+      result.checks.redis.ok = false;
+      result.checks.redis.error = err.message;
+    }
+  }
+
+  // Env vars essenciais
+  result.checks.env = {
+    SUPABASE_URL: !!process.env.SUPABASE_URL,
+    SUPABASE_SERVICE_KEY: !!process.env.SUPABASE_SERVICE_KEY,
+    OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+    EVOLUTION_API_URL: !!process.env.EVOLUTION_API_URL,
+    EVOLUTION_API_KEY: !!process.env.EVOLUTION_API_KEY,
+    UPSTASH_REDIS_REST_URL: !!process.env.UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN: !!process.env.UPSTASH_REDIS_REST_TOKEN,
+    TEAM_PHONES: !!process.env.TEAM_PHONES
+  };
+
+  const allOk = result.checks.supabase?.ok !== false && result.checks.redis?.ok !== false;
+  res.status(allOk ? 200 : 503).json(result);
+});
 
 // Diagnóstico: estado do buffer de mensagens. Útil para verificar em produção
 // se o agente está realmente acumulando mensagens picadas por 30s.

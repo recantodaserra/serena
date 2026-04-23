@@ -227,16 +227,20 @@ const ChatPage: React.FC<ChatPageProps> = ({ embedded = false }) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const data = await ChatAPI.getConversations();
       setConversations(data);
+      setError(null);
       if (selected) {
         const updated = data.find(c => c.id === selected.id);
         if (updated) setSelected(updated);
       }
+    } catch (err: any) {
+      setError(err?.message || 'Falha de conexão com o servidor');
     } finally {
       setLoading(false);
     }
@@ -261,6 +265,22 @@ const ChatPage: React.FC<ChatPageProps> = ({ embedded = false }) => {
       <div className={`w-full md:w-80 border-r border-gray-100 flex-shrink-0 ${showChat ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}>
         {loading ? (
           <div className="p-8 text-center text-gray-400">Carregando...</div>
+        ) : error ? (
+          <div className="p-6">
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <p className="text-sm font-bold text-red-800 mb-1">Falha ao carregar conversas</p>
+              <p className="text-xs text-red-600 break-all mb-3">{error}</p>
+              <p className="text-xs text-red-700 mb-3">
+                Verifique se o backend está no ar em <code className="bg-white px-1 rounded">{import.meta.env.VITE_API_URL || 'http://localhost:3001'}/health</code>
+              </p>
+              <button
+                onClick={load}
+                className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-md font-semibold"
+              >
+                <RefreshCw size={12} /> Tentar novamente
+              </button>
+            </div>
+          </div>
         ) : (
           <ConversationsList
             conversations={conversations}

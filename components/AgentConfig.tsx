@@ -59,6 +59,7 @@ const AgentConfigManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('identidade');
   const [saving, setSaving]     = useState(false);
   const [loading, setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast]       = useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
 
   const showToast = (type: 'ok' | 'err', msg: string) => {
@@ -68,11 +69,16 @@ const AgentConfigManager: React.FC = () => {
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const r = await fetch(`${API}/api/agent-config`);
+      if (!r.ok) {
+        const text = await r.text().catch(() => '');
+        throw new Error(`HTTP ${r.status} ${r.statusText}${text ? ` — ${text.slice(0, 200)}` : ''}`);
+      }
       setConfig(await r.json());
-    } catch {
-      showToast('err', 'Erro ao carregar configuração');
+    } catch (err: any) {
+      setLoadError(err?.message || 'Falha de conexão com o servidor');
     } finally {
       setLoading(false);
     }
@@ -121,7 +127,31 @@ const AgentConfigManager: React.FC = () => {
     </div>
   );
 
-  if (!config) return null;
+  if (loadError || !config) return (
+    <div className="max-w-2xl mx-auto mt-12 bg-red-50 border border-red-200 rounded-2xl p-6">
+      <div className="flex items-center gap-3 mb-3">
+        <AlertCircle className="text-red-500" size={24} />
+        <h3 className="font-bold text-red-800">Não foi possível carregar a configuração</h3>
+      </div>
+      <p className="text-sm text-red-700 mb-2">
+        O backend em <code className="bg-white px-1.5 py-0.5 rounded text-xs">{API}</code> não respondeu.
+      </p>
+      {loadError && (
+        <pre className="text-xs bg-white rounded p-3 text-red-600 overflow-x-auto mb-3">{loadError}</pre>
+      )}
+      <ol className="text-xs text-red-700 space-y-1 list-decimal list-inside mb-4">
+        <li>Abra <code className="bg-white px-1 rounded">{API}/health</code> em outra aba — se não carregar, o servidor está fora do ar.</li>
+        <li>Verifique os logs do deploy (Railway / Easypanel).</li>
+        <li>Confirme se <code className="bg-white px-1 rounded">VITE_API_URL</code> no Vercel aponta pro backend correto.</li>
+      </ol>
+      <button
+        onClick={load}
+        className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+      >
+        <RefreshCw size={14} /> Tentar novamente
+      </button>
+    </div>
+  );
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
