@@ -9,7 +9,8 @@ import {
   DollarSign, Home as HomeIcon, MapPin, Wallet, Image as ImageIcon, Save,
   RefreshCw, DownloadCloud, FileText, Upload, Camera, Settings, Search, Filter, Ban,
   PenLine, List, TrendingUp, Video, PlayCircle, FileInput, MoreVertical, XCircle, AlertTriangle,
-  FileSpreadsheet, ArrowUpFromLine, Info, MessageSquare, Bot, Menu
+  FileSpreadsheet, ArrowUpFromLine, Info, MessageSquare, Bot, Menu,
+  Eye, EyeOff
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ChatPage from './Chat';
@@ -20,6 +21,7 @@ import {
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatCurrency } from '../utils/helpers';
+import { usePrivacy } from '../contexts/PrivacyContext';
 
 // --- MODAL COM CONFIRMAÇÃO VISUAL (SEM window.confirm) ---
 interface ReservationDetailModalProps {
@@ -33,6 +35,9 @@ interface ReservationDetailModalProps {
 
 const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reservation, chalets, onClose, onDelete, onEdit, onSettle }) => {
   const [confirmMode, setConfirmMode] = useState<'none' | 'delete' | 'settle'>('none');
+  const { privacy } = usePrivacy();
+  const priv = (v: string) => privacy ? '••••••' : v;
+  const privNum = (n: number) => privacy ? 'R$ ••••••' : formatCurrency(n);
   const getChaletName = (id: string) => chalets.find(c => c.id === id)?.name || 'Desconhecido';
   
   const handleInnerClick = (e: React.MouseEvent) => e.stopPropagation();
@@ -73,13 +78,13 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-50 p-3 rounded-lg">
                     <p className="text-xs text-gray-400 font-bold uppercase flex gap-1"><User size={12}/> Titular</p>
-                    <p className="font-bold text-gray-800 truncate">{reservation.guest1Name}</p>
-                    <p className="text-sm text-gray-600">{reservation.guest1Phone || '-'}</p>
+                    <p className="font-bold text-gray-800 truncate">{priv(reservation.guest1Name)}</p>
+                    <p className="text-sm text-gray-600">{priv(reservation.guest1Phone || '-')}</p>
                   </div>
                   {reservation.guest2Name && (
                     <div className="bg-gray-50 p-3 rounded-lg">
                       <p className="text-xs text-gray-400 font-bold uppercase flex gap-1"><User size={12}/> Acompanhante</p>
-                      <p className="font-bold text-gray-800 truncate">{reservation.guest2Name}</p>
+                      <p className="font-bold text-gray-800 truncate">{priv(reservation.guest2Name)}</p>
                     </div>
                   )}
                   <div className="bg-gray-50 p-3 rounded-lg col-span-2">
@@ -90,9 +95,9 @@ const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({ reserva
                 <div className="border-t border-gray-100 pt-4">
                   <h4 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Wallet size={18} className="text-serra-accent" /> Detalhes Financeiros ({reservation.paymentMethod})</h4>
                   <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="bg-gray-50 p-2 rounded"><span className="block text-xs text-gray-400 uppercase">Total</span><span className="font-bold text-gray-800">{formatCurrency(reservation.totalValue)}</span></div>
-                    <div className="bg-green-50 p-2 rounded"><span className="block text-xs text-green-600 uppercase">Pago</span><span className="font-bold text-green-700">{formatCurrency(reservation.amountPaid || 0)}</span></div>
-                    <div className="bg-red-50 p-2 rounded"><span className="block text-xs text-red-500 uppercase">Falta</span><span className="font-bold text-red-600">{formatCurrency(reservation.totalValue - (reservation.amountPaid || 0))}</span></div>
+                    <div className="bg-gray-50 p-2 rounded"><span className="block text-xs text-gray-400 uppercase">Total</span><span className="font-bold text-gray-800">{privNum(reservation.totalValue)}</span></div>
+                    <div className="bg-green-50 p-2 rounded"><span className="block text-xs text-green-600 uppercase">Pago</span><span className="font-bold text-green-700">{privNum(reservation.amountPaid || 0)}</span></div>
+                    <div className="bg-red-50 p-2 rounded"><span className="block text-xs text-red-500 uppercase">Falta</span><span className="font-bold text-red-600">{privNum(reservation.totalValue - (reservation.amountPaid || 0))}</span></div>
                   </div>
                 </div>
               </>
@@ -589,6 +594,8 @@ const ImportSpreadsheetModal: React.FC<ImportSpreadsheetModalProps> = ({ chalets
 };
 
 const ReservationManager = () => {
+  const { privacy } = usePrivacy();
+  const priv = (v: string) => privacy ? '••••••' : v;
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [chalets, setChalets] = useState<Chalet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1070,7 +1077,7 @@ const ReservationManager = () => {
                          return (
                            <tr key={res.id} className="border-b border-gray-50 hover:bg-blue-50/30 transition-colors group cursor-pointer" onClick={() => setSelectedRes(res)}>
                              <td className="p-4">
-                                <p className="font-bold text-gray-800">{res.guest1Name}</p>
+                                <p className="font-bold text-gray-800">{priv(res.guest1Name)}</p>
                                 <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
                                    <User size={10} /> <span>{res.guest2Name ? '+1 Acompanhante' : 'Sozinho(a)'}</span>
                                 </div>
@@ -1523,6 +1530,8 @@ const CalendarManager = () => {
 };
 
 const FinancialManager = () => {
+    const { privacy } = usePrivacy();
+    const privNum = (n: number) => privacy ? 'R$ ••••••' : formatCurrency(n);
     const [reservations, setReservations] = useState<Reservation[]>([]);
     const [chalets, setChalets] = useState<Chalet[]>([]);
     const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
@@ -1575,7 +1584,7 @@ const FinancialManager = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-serra-accent">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Faturamento Total</p>
-                    <p className="text-2xl font-bold text-gray-800">{formatCurrency(totalRevenue)}</p>
+                    <p className="text-2xl font-bold text-gray-800">{privNum(totalRevenue)}</p>
                 </div>
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-blue-500">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Reservas</p>
@@ -1583,11 +1592,11 @@ const FinancialManager = () => {
                 </div>
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-green-500">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Recebido (Caixa)</p>
-                    <p className="text-2xl font-bold text-gray-800">{formatCurrency(totalReceived)}</p>
+                    <p className="text-2xl font-bold text-gray-800">{privNum(totalReceived)}</p>
                 </div>
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-red-500">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">A Receber</p>
-                    <p className="text-2xl font-bold text-gray-800">{formatCurrency(totalPending)}</p>
+                    <p className="text-2xl font-bold text-gray-800">{privNum(totalPending)}</p>
                 </div>
             </div>
 
@@ -1605,7 +1614,7 @@ const FinancialManager = () => {
                             <div key={chalet.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                                 <span className="font-medium text-gray-700">{chalet.name}</span>
                                 <div className="text-right">
-                                    <span className="font-bold text-gray-800 block">{formatCurrency(revenue)}</span>
+                                    <span className="font-bold text-gray-800 block">{privNum(revenue)}</span>
                                     <span className="text-xs text-gray-400">{count} res</span>
                                 </div>
                             </div>
@@ -2110,6 +2119,7 @@ const TAB_LABELS: Record<string, string> = {
 const Admin = () => {
   const [activeTab, setActiveTab] = useState('reservas');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { privacy, togglePrivacy } = usePrivacy();
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -2168,7 +2178,15 @@ const Admin = () => {
         {sidebarNavBtn('conversas', <MessageSquare size={18} />, 'Conversas WhatsApp', 'bg-purple-600')}
         {sidebarNavBtn('agente', <Bot size={18} />, 'Agente IA — Serena', 'bg-purple-600')}
 
-        <Link to="/" className="mt-auto flex items-center gap-3 p-3 text-red-300 hover:text-white transition-colors">
+        <button
+          onClick={togglePrivacy}
+          className={`mt-auto flex items-center gap-3 w-full text-left p-3 rounded-lg font-medium transition-colors ${privacy ? 'bg-yellow-500 text-white' : 'hover:bg-white/10 text-gray-300'}`}
+        >
+          {privacy ? <EyeOff size={18} /> : <Eye size={18} />}
+          {privacy ? 'Privacidade: ON' : 'Modo Privacidade'}
+        </button>
+
+        <Link to="/" className="flex items-center gap-3 p-3 text-red-300 hover:text-white transition-colors">
           <LogOut size={18} /> Sair do Sistema
         </Link>
       </aside>
@@ -2183,10 +2201,17 @@ const Admin = () => {
           >
             <Menu size={22} />
           </button>
-          <span className="font-bold text-sm">
+          <span className="font-bold text-sm flex-1">
             Recanto<span className="text-serra-accent">Admin</span>
             <span className="text-gray-400 font-normal ml-2">— {TAB_LABELS[activeTab]}</span>
           </span>
+          <button
+            onClick={togglePrivacy}
+            title={privacy ? 'Desativar modo privacidade' : 'Ativar modo privacidade'}
+            className={`p-1.5 rounded-lg transition-colors ${privacy ? 'bg-yellow-500 text-white' : 'hover:bg-white/10 text-gray-400'}`}
+          >
+            {privacy ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
         </div>
 
         <main className="flex-1 p-4 md:p-8 overflow-y-auto">

@@ -15,6 +15,7 @@ import ChatPage from './components/Chat';
 import Login from './components/Login';
 import Policies from './components/Policies';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { PrivacyProvider } from './contexts/PrivacyContext';
 import { WHATSAPP_NUMBER } from './constants';
 import { ReservationService, ChaletService, SiteService, PricingService, Reservation, CustomPrice } from './services/storage';
 import { Chalet } from './types';
@@ -435,6 +436,7 @@ const App: React.FC = () => {
 
   return (
     <HashRouter>
+      <PrivacyProvider>
       <AuthProvider>
         <Layout>
           <Routes>
@@ -448,6 +450,7 @@ const App: React.FC = () => {
           </Routes>
         </Layout>
       </AuthProvider>
+      </PrivacyProvider>
     </HashRouter>
   );
 };
