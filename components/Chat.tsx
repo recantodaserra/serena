@@ -3,6 +3,7 @@ import { ChatAPI, Conversation, Message } from '../services/chatApi';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Send, RefreshCw, Bot, User, UserCheck, MessageSquare, Phone, ChevronLeft, RotateCcw } from 'lucide-react';
+import { usePrivacy } from '../contexts/PrivacyContext';
 
 function formatTime(iso: string): string {
   try {
@@ -33,7 +34,10 @@ interface ConversationsListProps {
   onSelect: (c: Conversation) => void;
 }
 
-const ConversationsList: React.FC<ConversationsListProps> = ({ conversations, selectedId, onSelect }) => (
+const ConversationsList: React.FC<ConversationsListProps> = ({ conversations, selectedId, onSelect }) => {
+  const { privacy } = usePrivacy();
+  const maskPhone = (p: string) => privacy ? '••• ••••-••••' : p;
+  return (
   <div className="flex flex-col h-full">
     <div className="p-4 border-b border-gray-100">
       <h2 className="font-bold text-gray-800 flex items-center gap-2">
@@ -57,7 +61,7 @@ const ConversationsList: React.FC<ConversationsListProps> = ({ conversations, se
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-start gap-1">
-              <span className="font-semibold text-sm text-gray-800 truncate">{conv.name || conv.phone}</span>
+              <span className="font-semibold text-sm text-gray-800 truncate">{conv.name || maskPhone(conv.phone)}</span>
               <span className="text-[10px] text-gray-400 shrink-0">{conv.last_message_at ? formatTime(conv.last_message_at) : ''}</span>
             </div>
             <div className="flex justify-between items-center gap-1 mt-0.5">
@@ -76,7 +80,8 @@ const ConversationsList: React.FC<ConversationsListProps> = ({ conversations, se
       ))}
     </div>
   </div>
-);
+  );
+};
 
 interface ChatWindowProps {
   conversation: Conversation;
@@ -85,6 +90,8 @@ interface ChatWindowProps {
 }
 
 const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, onBack, onUpdate }) => {
+  const { privacy } = usePrivacy();
+  const maskPhone = (p: string) => privacy ? '••• ••••-••••' : p;
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -165,9 +172,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, onBack, onUpdate 
           <Phone size={15} className="text-gray-500" />
         </div>
         <div className="flex-1">
-          <div className="font-semibold text-sm text-gray-800">{conversation.name || conversation.phone}</div>
+          <div className="font-semibold text-sm text-gray-800">{conversation.name || maskPhone(conversation.phone)}</div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">{conversation.phone}</span>
+            <span className="text-xs text-gray-400">{maskPhone(conversation.phone)}</span>
             {statusBadge(conversation.status)}
           </div>
         </div>

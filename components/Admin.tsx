@@ -1135,6 +1135,8 @@ const ReservationManager = () => {
 };
 
 const CalendarManager = () => {
+  const { privacy } = usePrivacy();
+  const priv = (v: string) => privacy ? '••••••' : v;
   const [currentDate, setCurrentDate] = useState(new Date());
   const [chalets, setChalets] = useState<Chalet[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -1314,7 +1316,7 @@ const CalendarManager = () => {
                         <div className="mt-0.5 sm:mt-1 hidden sm:block">
                             {res ? (
                                 <span className="block text-[10px] bg-white/50 px-1 rounded truncate text-gray-600">
-                                    {res.type === 'maintenance' ? 'Manut.' : res.guest1Name}
+                                    {res.type === 'maintenance' ? 'Manut.' : priv(res.guest1Name)}
                                 </span>
                             ) : (
                                 <span className={`block text-xs font-medium ${customPrice ? 'text-blue-600' : 'text-green-600'}`}>
@@ -1588,7 +1590,7 @@ const FinancialManager = () => {
                 </div>
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-blue-500">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Reservas</p>
-                    <p className="text-2xl font-bold text-gray-800">{totalCount}</p>
+                    <p className="text-2xl font-bold text-gray-800">{privacy ? '••' : totalCount}</p>
                 </div>
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-green-500">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Recebido (Caixa)</p>
@@ -1615,7 +1617,7 @@ const FinancialManager = () => {
                                 <span className="font-medium text-gray-700">{chalet.name}</span>
                                 <div className="text-right">
                                     <span className="font-bold text-gray-800 block">{privNum(revenue)}</span>
-                                    <span className="text-xs text-gray-400">{count} res</span>
+                                    <span className="text-xs text-gray-400">{privacy ? '•• res' : `${count} res`}</span>
                                 </div>
                             </div>
                         );
