@@ -163,6 +163,30 @@ export const ReservationDB = {
     return !data || data.length === 0;
   },
 
+  async findNextAvailableDate(chaletId: string, fromDate: string, nights: number): Promise<string | null> {
+    function addD(dateStr: string, n: number): string {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d + n)).toISOString().split('T')[0];
+    }
+    const maxDate = addD(fromDate, 90);
+    const { data } = await supabase
+      .from('reservations')
+      .select('start_date, end_date')
+      .eq('chalet_id', chaletId)
+      .gt('end_date', fromDate)
+      .lt('start_date', maxDate)
+      .order('start_date', { ascending: true });
+    const occupied = (data || []).map((r: any) => ({ start: r.start_date, end: r.end_date }));
+    let candidate = fromDate;
+    while (candidate < maxDate) {
+      const candidateEnd = addD(candidate, nights);
+      const conflict = occupied.find(r => r.start < candidateEnd && r.end > candidate);
+      if (!conflict) return candidate;
+      candidate = conflict.end;
+    }
+    return null;
+  },
+
   async getChalets() {
     const { data } = await supabase.from('chalets').select('id, name, base_price, weekday_price');
     return data || [];

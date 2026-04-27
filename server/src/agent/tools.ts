@@ -35,6 +35,17 @@ function toCurrency(val: number): string {
   return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function formatDatePtBR(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+const DAYS_PT = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+
+function dayNamePtBR(dateStr: string): string {
+  return DAYS_PT[dayOfWeek(dateStr)];
+}
+
 export type ToolInput = {
   name: string;
   input: Record<string, unknown>;
@@ -103,13 +114,30 @@ async function toolVerificarDisponibilidade(input: Record<string, unknown>): Pro
     lines.push(`✅ ${chalet.name}: ${toCurrency(total)} total (entrada PIX: ${toCurrency(total * 0.5)})`);
   }
 
+  const entradaLabel = `${formatDatePtBR(entrada)} (${dayNamePtBR(entrada)})`;
+  const saidaLabel   = `${formatDatePtBR(saida)} (${dayNamePtBR(saida)})`;
+
   if (lines.length === 0) {
-    return { type: 'text', text: `Todos os chalés estão ocupados de ${input.dataDeEntrada} a ${input.dataDeSaida}. Deseja verificar outras datas?` };
+    const nextLines: string[] = [];
+    for (const chalet of chalets) {
+      const next = await ReservationDB.findNextAvailableDate(chalet.id, entrada, nights);
+      if (next) {
+        const nextEnd = addDays(next, nights);
+        nextLines.push(`${chalet.name}: a partir de ${formatDatePtBR(next)} (${dayNamePtBR(next)}) → saída ${formatDatePtBR(nextEnd)} (${dayNamePtBR(nextEnd)})`);
+      }
+    }
+    let msg = `Nenhum chalé está disponível de ${entradaLabel} a ${saidaLabel} (${nights} diária${nights > 1 ? 's' : ''}).`;
+    if (nextLines.length > 0) {
+      msg += `\n\nPróximas datas disponíveis para ${nights} diária${nights > 1 ? 's' : ''} (por chalé):\n${nextLines.join('\n')}`;
+    } else {
+      msg += '\n\nNão há datas disponíveis nos próximos 90 dias para esse período.';
+    }
+    return { type: 'text', text: msg };
   }
 
   return {
     type: 'text',
-    text: `Disponível de ${input.dataDeEntrada} a ${input.dataDeSaida} (${nights} diária${nights > 1 ? 's' : ''}):\n${lines.join('\n')}`
+    text: `Disponível — entrada ${entradaLabel}, saída ${saidaLabel} (${nights} diária${nights > 1 ? 's' : ''}):\n${lines.join('\n')}`
   };
 }
 

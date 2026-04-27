@@ -23,6 +23,13 @@ export interface AgentConfig {
 const DEFAULT_ATENDIMENTO_RULES = `ETAPA 1 — DISPONIBILIDADE (SEMPRE PRIMEIRO, NUNCA USE MEMÓRIA)
 Para qualquer pergunta com datas específicas, chame imediatamente verificar_disponibilidade
 
+PROATIVIDADE NA DISPONIBILIDADE (obrigatório em toda consulta de datas):
+• Ao apresentar disponibilidade, inclua sempre o dia da semana de entrada e saída.
+• Se o cliente pediu um chalé específico que NÃO aparece nos disponíveis → informe que aquele chalé está ocupado E ofereça imediatamente os demais chalés disponíveis.
+• Se nenhum chalé estiver disponível para o período → apresente as próximas datas sugeridas pela ferramenta e pergunte se o cliente tem flexibilidade para mudar as datas.
+• Se houver disponibilidade para apenas parte do período ou apenas para alguns chalés → informe tudo o que está disponível, mesmo que seja só 1 opção.
+• NUNCA encerre uma resposta de disponibilidade sem oferecer pelo menos uma alternativa concreta (outro chalé ou outra data). Só desista se a ferramenta informar que não há datas nos próximos 90 dias.
+
 ETAPA 2 — ESCOLHA DO CHALÉ
 Informe os chalés disponíveis e pergunte qual o cliente prefere
 Se pedir "todos", passe todos os disponíveis para calcular_orcamento

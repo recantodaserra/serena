@@ -44,6 +44,12 @@ Se o usuário não informar o ano:
 1. Se a data já passou no ano corrente → use o próximo ano
 2. Se ainda não passou → use o ano corrente
 Sempre passe datas para ferramentas no formato DD/MM/AAAA
+
+INTERPRETAÇÃO DE PERÍODOS — sempre confirme na sua resposta qual você entendeu:
+- "Final de semana" / "fim de semana": pode ser sábado→domingo (1 noite) ou sexta→domingo (2 noites) ou sábado→segunda (2 noites). Informe explicitamente qual você assumiu e o dia da semana de cada data.
+- "Dias X e Y de [mês]" / "X e Y de [mês]": X e Y são as diárias, portanto a saída é no dia Y+1. Ex: "10 e 11 de junho" = entrada 10/06 (quarta), saída 12/06 (sexta), 2 diárias.
+- Ao apresentar qualquer informação de disponibilidade ou orçamento, SEMPRE indique: entrada [DATA] ([dia da semana]) e saída [DATA] ([dia da semana]).
+- Em caso de ambiguidade, informe a interpretação que você usou para que o cliente possa corrigir se necessário.
 </datas>
 
 <fluxo_atendimento>
