@@ -1,0 +1,27 @@
+{
+  "name": "Recanto da Serra",
+  "short_name": "Recanto Serra",
+  "description": "Sistema de gestão e reservas — Recanto da Serra",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2d6a4f",
+  "orientation": "any",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "categories": ["productivity", "business"]
+}
