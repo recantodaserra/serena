@@ -23,6 +23,8 @@ import { ptBR } from 'date-fns/locale';
 import { formatCurrency } from '../utils/helpers';
 import { usePrivacy } from '../contexts/PrivacyContext';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 // --- MODAL COM CONFIRMAÇÃO VISUAL (SEM window.confirm) ---
 interface ReservationDetailModalProps {
   reservation: Reservation;
@@ -593,6 +595,255 @@ const ImportSpreadsheetModal: React.FC<ImportSpreadsheetModalProps> = ({ chalets
   );
 };
 
+// --- MODAL DE CRIAÇÃO DE RESERVA VIA IA ---
+type AiFillData = {
+  chaletId: string; startDate: string; endDate: string; origin: string;
+  guest1Name: string; guest1Cpf: string; guest1Phone: string;
+  guest2Name: string; guest2Cpf: string; totalValue: number;
+  amountPaid: number; paymentMethod: string; paymentType: string; observations: string;
+};
+
+type AiResult = {
+  parsedData: Record<string, any>;
+  missingFields: string[];
+  missingFieldsLabels: string[];
+  message: string;
+  complete: boolean;
+};
+
+const AI_FIELD_LABELS: Record<string, string> = {
+  chaletId: 'Chalé', startDate: 'Check-in', endDate: 'Check-out',
+  guest1Name: 'Hóspede Titular', guest1Cpf: 'CPF', guest1Phone: 'Telefone',
+  guest2Name: 'Acompanhante', guest2Cpf: 'CPF Acompanhante',
+  totalValue: 'Valor Total', paymentMethod: 'Pagamento',
+  paymentType: 'Status Pagamento', amountPaid: 'Valor Pago',
+  origin: 'Origem', observations: 'Observações'
+};
+
+const AI_SHOW_FIELDS = [
+  'chaletId', 'startDate', 'endDate', 'guest1Name', 'guest1Cpf',
+  'guest1Phone', 'guest2Name', 'totalValue', 'paymentMethod', 'paymentType',
+  'amountPaid', 'observations'
+];
+
+const AiReservationModal: React.FC<{
+  chalets: Chalet[];
+  onClose: () => void;
+  onFill: (data: AiFillData) => void;
+}> = ({ chalets, onClose, onFill }) => {
+  const [inputText, setInputText] = useState('');
+  const [extraText, setExtraText] = useState('');
+  const [accumulatedText, setAccumulatedText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<AiResult | null>(null);
+
+  const analyze = async (text: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/parse-reservation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, chalets: chalets.map(c => ({ id: c.id, name: c.name })) })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setResult(await res.json());
+    } catch (err: any) {
+      alert('Erro ao analisar: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAnalyze = () => {
+    const text = inputText.trim();
+    if (!text) return;
+    setAccumulatedText(text);
+    analyze(text);
+  };
+
+  const handleComplement = () => {
+    const combined = accumulatedText + '\n\nInformações adicionais:\n' + extraText.trim();
+    setAccumulatedText(combined);
+    setExtraText('');
+    analyze(combined);
+  };
+
+  const handleFill = () => {
+    if (!result?.parsedData) return;
+    const d = result.parsedData;
+    const totalVal = Number(d.totalValue) || 0;
+    onFill({
+      chaletId: d.chaletId || (chalets[0]?.id || ''),
+      startDate: d.startDate || '',
+      endDate: d.endDate || '',
+      origin: d.origin || 'WhatsApp',
+      guest1Name: d.guest1Name || '',
+      guest1Cpf: d.guest1Cpf || '',
+      guest1Phone: d.guest1Phone || '',
+      guest2Name: d.guest2Name || '',
+      guest2Cpf: d.guest2Cpf || '',
+      totalValue: totalVal,
+      amountPaid: Number(d.amountPaid) || 0,
+      paymentMethod: d.paymentMethod || 'Pix',
+      paymentType: d.paymentType || 'Integral',
+      observations: d.observations || ''
+    });
+  };
+
+  const formatFieldValue = (key: string, val: any): string => {
+    if (val === null || val === undefined || val === '') return '-';
+    if (key === 'chaletId') return chalets.find(c => c.id === val)?.name || val;
+    if (key === 'startDate' || key === 'endDate') {
+      try { return format(parseISO(val), 'dd/MM/yyyy'); } catch { return val; }
+    }
+    if (key === 'totalValue' || key === 'amountPaid') return formatCurrency(Number(val));
+    return String(val);
+  };
+
+  const REQUIRED_FIELDS = ['chaletId', 'startDate', 'endDate', 'guest1Name'];
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-violet-600 to-indigo-600 p-5 text-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <Bot size={22} />
+            <div>
+              <h3 className="font-bold text-lg">Criar Reserva via IA</h3>
+              <p className="text-white/70 text-xs">Cole as informações em texto livre</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose}>
+            <X size={22} className="text-white/70 hover:text-white" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4 overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-gray-200">
+          {/* Fase inicial: textarea */}
+          {!result && (
+            <>
+              <textarea
+                value={inputText}
+                onChange={e => setInputText(e.target.value)}
+                rows={11}
+                placeholder={`Cole aqui as informações da reserva. Exemplo:\n\nchalé: Chalé do Horizonte\ncheck-in: 30/05 às 14:00\ncheck-out: 01/06 as 12:00\nhóspedes: Pedro Tavares da Silva Neto\nCPF: 045.648.573-20\nHeloísa Lima Nogueira\ntelefone: 86 999416181\nvalor da reserva: R$ 1000,00\npagamento: 100% Pix dia 24/04\nobservação:`}
+                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-violet-400 resize-none placeholder-gray-400 font-mono leading-relaxed"
+              />
+              <button
+                type="button"
+                onClick={handleAnalyze}
+                disabled={!inputText.trim() || loading}
+                className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
+              >
+                {loading ? <RefreshCw size={18} className="animate-spin" /> : <Bot size={18} />}
+                {loading ? 'Analisando...' : 'Analisar Texto'}
+              </button>
+            </>
+          )}
+
+          {/* Fase de resultado */}
+          {result && (
+            <>
+              {/* Mensagem da IA */}
+              <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 flex items-start gap-2">
+                <Bot size={16} className="text-violet-600 mt-0.5 shrink-0" />
+                <p className="text-sm text-violet-900">{result.message}</p>
+              </div>
+
+              {/* Dados extraídos */}
+              {result.parsedData && (
+                <div className="rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Dados extraídos</p>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {AI_SHOW_FIELDS.map(key => {
+                      const val = result.parsedData[key];
+                      if (val === null || val === undefined || val === '') return null;
+                      const isRequired = REQUIRED_FIELDS.includes(key);
+                      return (
+                        <div key={key} className="flex items-center justify-between px-4 py-2">
+                          <span className="text-xs text-gray-500">{AI_FIELD_LABELS[key]}</span>
+                          <span className={`text-sm font-semibold flex items-center gap-1 ${isRequired ? 'text-green-700' : 'text-gray-700'}`}>
+                            {isRequired && <CheckCircle2 size={12} className="text-green-500" />}
+                            {formatFieldValue(key, val)}
+                          </span>
+                        </div>
+                      );
+                    }).filter(Boolean)}
+                  </div>
+                </div>
+              )}
+
+              {/* Campos faltando */}
+              {!result.complete && (result.missingFieldsLabels?.length ?? 0) > 0 && (
+                <div className="space-y-3">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertCircle size={16} className="text-amber-600" />
+                      <p className="text-xs font-bold text-amber-700 uppercase">Campos obrigatórios faltando</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {result.missingFieldsLabels.map((label, i) => (
+                        <span key={i} className="px-2 py-1 bg-amber-100 text-amber-800 text-xs font-semibold rounded-full">
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <textarea
+                    value={extraText}
+                    onChange={e => setExtraText(e.target.value)}
+                    rows={3}
+                    placeholder="Informe os dados que faltam..."
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:border-violet-400 resize-none placeholder-gray-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleComplement}
+                    disabled={!extraText.trim() || loading}
+                    className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
+                  >
+                    {loading ? <RefreshCw size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+                    {loading ? 'Reanalisando...' : 'Completar e Reanalisar'}
+                  </button>
+                </div>
+              )}
+
+              {/* Botão de confirmação */}
+              {result.complete && (
+                <button
+                  type="button"
+                  onClick={handleFill}
+                  className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-md"
+                >
+                  <CheckCircle2 size={20} />
+                  Preencher Formulário
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => { setResult(null); setExtraText(''); setAccumulatedText(''); setInputText(''); }}
+                className="w-full py-2 text-gray-400 hover:text-gray-600 text-sm transition-colors"
+              >
+                ← Recomeçar
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ReservationManager = () => {
   const { privacy } = usePrivacy();
   const priv = (v: string) => privacy ? '••••••' : v;
@@ -602,6 +853,7 @@ const ReservationManager = () => {
   const [selectedRes, setSelectedRes] = useState<Reservation | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const [filterStartDate, setFilterStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [filterEndDate, setFilterEndDate] = useState(format(addMonths(new Date(), 1), 'yyyy-MM-dd'));
@@ -716,6 +968,12 @@ const ReservationManager = () => {
     });
   };
 
+  const handleAiFill = (data: AiFillData) => {
+    setFormData(data);
+    setEditingId(null);
+    setShowAiModal(false);
+  };
+
   const handleDelete = async (id: string) => {
     try {
       await ReservationService.remove(id);
@@ -781,9 +1039,17 @@ const ReservationManager = () => {
               {editingId ? 'Editar Reserva' : 'Nova Reserva'}
             </h2>
           </div>
-          {editingId && (
+          {editingId ? (
             <button onClick={handleCancelEdit} className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1 bg-white px-2 py-1 rounded border border-red-100">
                <XCircle size={14}/> Cancelar
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowAiModal(true)}
+              className="text-xs font-bold text-violet-600 hover:text-violet-800 flex items-center gap-1 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded border border-violet-200 transition-colors"
+            >
+              <Bot size={14}/> Criar via IA
             </button>
           )}
         </div>
@@ -1128,6 +1394,14 @@ const ReservationManager = () => {
           chalets={chalets}
           onClose={() => setShowImportModal(false)}
           onSuccess={() => { loadData(); setShowImportModal(false); }}
+        />
+      )}
+
+      {showAiModal && (
+        <AiReservationModal
+          chalets={chalets}
+          onClose={() => setShowAiModal(false)}
+          onFill={handleAiFill}
         />
       )}
     </div>

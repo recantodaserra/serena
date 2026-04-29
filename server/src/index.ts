@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import OpenAI from 'openai';
 import { handleWebhook } from './webhook.js';
 import { supabase } from './services/supabase.js';
 import { WhatsApp } from './services/whatsapp.js';
@@ -202,6 +203,80 @@ app.get('/debug/buffer', async (_, res) => {
 app.get('/debug/silence/:phone', async (req, res) => {
   try { res.json(await silenceInfo(req.params.phone)); }
   catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// --- Parser de reservas via IA ---
+app.post('/api/parse-reservation', async (req, res) => {
+  const { text, chalets } = req.body as {
+    text: string;
+    chalets: Array<{ id: string; name: string }>;
+  };
+
+  if (!text || !chalets) {
+    return res.status(400).json({ error: 'text e chalets são obrigatórios' });
+  }
+
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const currentYear = new Date().getFullYear();
+    const chaletsList = chalets.map(c => `- "${c.name}" (id: ${c.id})`).join('\n');
+
+    const systemPrompt = `Você é um extrator de dados de reservas hoteleiras. Analise o texto e extraia as informações em JSON.
+
+Chalés disponíveis (use o id exato):
+${chaletsList}
+
+Retorne APENAS um JSON válido com este formato:
+{
+  "parsedData": {
+    "chaletId": "string ou null",
+    "startDate": "YYYY-MM-DD ou null",
+    "endDate": "YYYY-MM-DD ou null",
+    "guest1Name": "string ou null",
+    "guest1Cpf": "string ou null",
+    "guest1Phone": "string ou null",
+    "guest2Name": "string ou null",
+    "guest2Cpf": "string ou null",
+    "totalValue": número ou null,
+    "paymentMethod": "Pix|Crédito|Débito|Dinheiro ou null",
+    "paymentType": "Integral|Parcial ou null",
+    "amountPaid": número ou null,
+    "origin": "WhatsApp|Instagram|Airbnb|Booking|Indicação|Outro ou null",
+    "observations": "string ou null"
+  },
+  "missingFields": ["campo1"],
+  "missingFieldsLabels": ["Label 1"],
+  "message": "Resumo amigável em português do que foi extraído e o que falta",
+  "complete": true
+}
+
+Regras:
+- Ano padrão: ${currentYear}. "30/05" vira "${currentYear}-05-30". Ignore horários (14:00).
+- "100% Pix" → paymentType: "Integral", paymentMethod: "Pix", amountPaid = totalValue.
+- Qualquer outra porcentagem → paymentType: "Parcial", amountPaid = (%) * totalValue.
+- O segundo hóspede listado é guest2Name. CPF após o titular é guest1Cpf, CPF após o segundo é guest2Cpf.
+- Telefone vai para guest1Phone.
+- Se o chalé não for identificado, deixe chaletId como null.
+- "complete" = true somente se chaletId, startDate, endDate E guest1Name forem todos não-nulos.
+- missingFields e missingFieldsLabels listam apenas os 4 campos obrigatórios que faltam.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4.1-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: text }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.1,
+      max_tokens: 800
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || '{}');
+    res.json(result);
+  } catch (err: any) {
+    console.error('[parse-reservation]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(PORT, () => {
