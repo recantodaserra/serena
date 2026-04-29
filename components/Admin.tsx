@@ -629,13 +629,26 @@ const AI_SHOW_FIELDS = [
 const AiReservationModal: React.FC<{
   chalets: Chalet[];
   onClose: () => void;
-  onFill: (data: AiFillData) => void;
-}> = ({ chalets, onClose, onFill }) => {
+  onSave: (data: AiFillData) => Promise<void>;
+}> = ({ chalets, onClose, onSave }) => {
   const [inputText, setInputText] = useState('');
   const [extraText, setExtraText] = useState('');
   const [accumulatedText, setAccumulatedText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<AiResult | null>(null);
+
+  // Resolve chaletId mesmo se a IA tiver retornado o nome em vez do id
+  const resolveChaletId = (val: any): string => {
+    if (!val) return '';
+    const direct = chalets.find(c => c.id === val);
+    if (direct) return direct.id;
+    const byName = chalets.find(c => c.name.toLowerCase() === String(val).toLowerCase());
+    if (byName) return byName.id;
+    const fuzzy = chalets.find(c => c.name.toLowerCase().includes(String(val).toLowerCase()) ||
+      String(val).toLowerCase().includes(c.name.toLowerCase()));
+    return fuzzy?.id || '';
+  };
 
   const analyze = async (text: string) => {
     setLoading(true);
@@ -646,7 +659,24 @@ const AiReservationModal: React.FC<{
         body: JSON.stringify({ text, chalets: chalets.map(c => ({ id: c.id, name: c.name })) })
       });
       if (!res.ok) throw new Error(await res.text());
-      setResult(await res.json());
+      const data: AiResult = await res.json();
+
+      // Normaliza chaletId (caso a IA retorne nome)
+      if (data.parsedData?.chaletId) {
+        const resolved = resolveChaletId(data.parsedData.chaletId);
+        if (resolved) {
+          data.parsedData.chaletId = resolved;
+        } else {
+          data.parsedData.chaletId = null;
+          if (!data.missingFields?.includes('chaletId')) {
+            data.missingFields = [...(data.missingFields || []), 'chaletId'];
+            data.missingFieldsLabels = [...(data.missingFieldsLabels || []), 'Chalé'];
+          }
+          data.complete = false;
+        }
+      }
+
+      setResult(data);
     } catch (err: any) {
       alert('Erro ao analisar: ' + err.message);
     } finally {
@@ -668,12 +698,15 @@ const AiReservationModal: React.FC<{
     analyze(combined);
   };
 
-  const handleFill = () => {
+  const handleSave = async () => {
     if (!result?.parsedData) return;
     const d = result.parsedData;
     const totalVal = Number(d.totalValue) || 0;
-    onFill({
-      chaletId: d.chaletId || (chalets[0]?.id || ''),
+    const paymentType = (d.paymentType === 'Parcial' ? 'Parcial' : 'Integral') as string;
+    const amountPaid = paymentType === 'Integral' ? totalVal : (Number(d.amountPaid) || 0);
+
+    const data: AiFillData = {
+      chaletId: resolveChaletId(d.chaletId) || (chalets[0]?.id || ''),
       startDate: d.startDate || '',
       endDate: d.endDate || '',
       origin: d.origin || 'WhatsApp',
@@ -683,11 +716,20 @@ const AiReservationModal: React.FC<{
       guest2Name: d.guest2Name || '',
       guest2Cpf: d.guest2Cpf || '',
       totalValue: totalVal,
-      amountPaid: Number(d.amountPaid) || 0,
+      amountPaid,
       paymentMethod: d.paymentMethod || 'Pix',
-      paymentType: d.paymentType || 'Integral',
+      paymentType,
       observations: d.observations || ''
-    });
+    };
+
+    setSaving(true);
+    try {
+      await onSave(data);
+    } catch (err: any) {
+      alert('Erro ao salvar: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const formatFieldValue = (key: string, val: any): string => {
@@ -821,18 +863,20 @@ const AiReservationModal: React.FC<{
               {result.complete && (
                 <button
                   type="button"
-                  onClick={handleFill}
-                  className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-md"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-md disabled:opacity-50"
                 >
-                  <CheckCircle2 size={20} />
-                  Preencher Formulário
+                  {saving ? <RefreshCw size={20} className="animate-spin" /> : <CheckCircle2 size={20} />}
+                  {saving ? 'Salvando...' : 'Criar Reserva'}
                 </button>
               )}
 
               <button
                 type="button"
                 onClick={() => { setResult(null); setExtraText(''); setAccumulatedText(''); setInputText(''); }}
-                className="w-full py-2 text-gray-400 hover:text-gray-600 text-sm transition-colors"
+                disabled={saving}
+                className="w-full py-2 text-gray-400 hover:text-gray-600 text-sm transition-colors disabled:opacity-50"
               >
                 ← Recomeçar
               </button>
@@ -968,10 +1012,35 @@ const ReservationManager = () => {
     });
   };
 
-  const handleAiFill = (data: AiFillData) => {
-    setFormData(data);
-    setEditingId(null);
+  const handleAiSave = async (data: AiFillData) => {
+    if (!data.chaletId || !data.startDate || !data.endDate || !data.guest1Name) {
+      throw new Error('Faltam campos obrigatórios');
+    }
+    const finalAmountPaid = data.paymentType === 'Integral'
+      ? Number(data.totalValue)
+      : Number(data.amountPaid);
+
+    await ReservationService.add({
+      chaletId: data.chaletId,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      origin: data.origin,
+      guest1Name: data.guest1Name,
+      guest1Cpf: data.guest1Cpf,
+      guest1Phone: data.guest1Phone,
+      guest2Name: data.guest2Name,
+      guest2Cpf: data.guest2Cpf,
+      totalValue: Number(data.totalValue),
+      paymentMethod: data.paymentMethod,
+      paymentType: data.paymentType as 'Integral' | 'Parcial',
+      amountPaid: finalAmountPaid,
+      observations: data.observations,
+      type: 'guest'
+    });
+
+    await loadData();
     setShowAiModal(false);
+    alert('Reserva criada com sucesso!');
   };
 
   const handleDelete = async (id: string) => {
@@ -1401,7 +1470,7 @@ const ReservationManager = () => {
         <AiReservationModal
           chalets={chalets}
           onClose={() => setShowAiModal(false)}
-          onFill={handleAiFill}
+          onSave={handleAiSave}
         />
       )}
     </div>

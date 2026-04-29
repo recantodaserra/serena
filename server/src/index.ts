@@ -218,18 +218,22 @@ app.post('/api/parse-reservation', async (req, res) => {
 
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const currentYear = new Date().getFullYear();
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth() + 1;
     const chaletsList = chalets.map(c => `- "${c.name}" (id: ${c.id})`).join('\n');
 
-    const systemPrompt = `Você é um extrator de dados de reservas hoteleiras. Analise o texto e extraia as informações em JSON.
+    const systemPrompt = `Você é um extrator de dados de reservas hoteleiras brasileiras. Analise o texto e extraia as informações em JSON.
 
-Chalés disponíveis (use o id exato):
+DATA DE HOJE: ${today.toISOString().split('T')[0]} (ano ${currentYear}, mês ${String(currentMonth).padStart(2, '0')}).
+
+Chalés disponíveis (use SEMPRE o id exato, NUNCA o nome):
 ${chaletsList}
 
 Retorne APENAS um JSON válido com este formato:
 {
   "parsedData": {
-    "chaletId": "string ou null",
+    "chaletId": "string com o id do chalé ou null",
     "startDate": "YYYY-MM-DD ou null",
     "endDate": "YYYY-MM-DD ou null",
     "guest1Name": "string ou null",
@@ -250,14 +254,33 @@ Retorne APENAS um JSON válido com este formato:
   "complete": true
 }
 
-Regras:
-- Ano padrão: ${currentYear}. "30/05" vira "${currentYear}-05-30". Ignore horários (14:00).
+REGRAS DE DATAS (MUITO IMPORTANTE):
+- Formato BRASILEIRO: DD/MM ou DD/MM/YYYY. NUNCA interprete como MM/DD americano.
+- "30/05" significa dia 30 de MAIO. Vira "${currentYear}-05-30".
+- "01/06" significa dia 1 de JUNHO. Vira "${currentYear}-06-01".
+- "15/04" significa dia 15 de ABRIL. Vira "${currentYear}-04-15".
+- Se o ano não estiver no texto, use ${currentYear}.
+- Se a data já passou nesse ano, use o próximo ano (${currentYear + 1}).
+- IGNORE horários (ex: "às 14:00", "as 12:00") — apenas a data importa.
+- "check-in: 30/05 às 14:00" → startDate: "${currentYear}-05-30".
+- "check-out: 01/06 as 12:00" → endDate: "${currentYear}-06-01".
+- Datas como "dia 24/04" no contexto de pagamento NÃO são startDate nem endDate, são da data do pagamento (ignore).
+
+REGRAS DE PAGAMENTO:
 - "100% Pix" → paymentType: "Integral", paymentMethod: "Pix", amountPaid = totalValue.
-- Qualquer outra porcentagem → paymentType: "Parcial", amountPaid = (%) * totalValue.
-- O segundo hóspede listado é guest2Name. CPF após o titular é guest1Cpf, CPF após o segundo é guest2Cpf.
-- Telefone vai para guest1Phone.
-- Se o chalé não for identificado, deixe chaletId como null.
-- "complete" = true somente se chaletId, startDate, endDate E guest1Name forem todos não-nulos.
+- "50% Pix" → paymentType: "Parcial", paymentMethod: "Pix", amountPaid = totalValue * 0.5.
+- "Pago integral" → paymentType: "Integral", amountPaid = totalValue.
+
+REGRAS DE HÓSPEDES:
+- O primeiro nome é guest1Name (titular).
+- CPF logo após o titular é guest1Cpf.
+- O segundo nome (sem CPF próprio) é guest2Name.
+- CPF logo após o segundo nome é guest2Cpf.
+- Telefone vai sempre em guest1Phone (do titular).
+
+OUTRAS REGRAS:
+- chaletId DEVE ser um dos ids da lista acima. Se o nome no texto não bate com nenhum chalé, deixe null.
+- "complete" = true APENAS se chaletId, startDate, endDate E guest1Name forem todos não-nulos.
 - missingFields e missingFieldsLabels listam apenas os 4 campos obrigatórios que faltam.`;
 
     const response = await openai.chat.completions.create({
